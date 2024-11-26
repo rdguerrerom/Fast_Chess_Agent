@@ -1,7 +1,8 @@
 import time
 import math
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple, Optional, Union
+from enum import Enum, auto
 
 
 
@@ -141,7 +142,6 @@ class OpeningBook:
         moves = self.book.get(position_fen, [])
         if moves:
             # Add some randomization - don't always pick the first move
-            import random
 
             return random.choice(moves)
         return None
@@ -172,9 +172,6 @@ class OpeningBook:
         return "Unknown Opening"
 
 
-import random
-from typing import Dict, List, Tuple, Optional, Union
-from enum import Enum, auto
 
 
 class StrategicGoal(Enum):
@@ -485,10 +482,6 @@ def demonstrate_middlegame_strategy():
         print(f"{key.replace('_', ' ').title()}: {value}")
 
 
-from enum import Enum, auto
-from typing import Dict, List, Tuple, Optional, Union
-import math
-import random
 
 
 class EndgameObjective(Enum):
