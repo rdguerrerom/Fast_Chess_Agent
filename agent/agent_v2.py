@@ -1068,7 +1068,7 @@ class ChessPosition:
 
 
 class ChessAgent:
-    def __init__(self, max_depth=4, max_time=5.0):
+    def __init__(self, max_depth=12, max_time=5.0):
         # Integrate multiple components
         self.opening_book = OpeningBook(max_positions=5000)
         self.middlegame_book = MiddlegameBook(max_positions=10000)
@@ -1094,6 +1094,7 @@ class ChessAgent:
         1. Opening book lookup
         2. Strategic planning
         3. Depth-limited search with pruning
+        4. Fallback move generation
         """
         self.current_position = position
         self.start_time = time.time()
@@ -1102,11 +1103,13 @@ class ChessAgent:
         game_phase = self._determine_game_phase(position)
         fen = position.to_fen()
 
+        # Opening book lookup
         if game_phase == "opening" and len(self.position_history) < 15:
             book_move = self.opening_book.get_book_move(fen)
             if book_move:
                 return self._convert_move_to_fen(position, book_move)
 
+        # Middlegame strategic planning
         if game_phase == "middlegame":
             strategy = self.middlegame_book.suggest_middlegame_plan(
                 fen, primary_goal=StrategicGoal.POSITIONAL_PLAY
@@ -1115,6 +1118,7 @@ class ChessAgent:
             if recommended_move:
                 return self._convert_move_to_fen(position, recommended_move)
 
+        # Endgame strategic planning
         if game_phase == "endgame":
             strategy = self.endgame_book.suggest_endgame_plan(
                 fen, primary_objective=EndgameObjective.PAWN_PROMOTION
@@ -1123,10 +1127,31 @@ class ChessAgent:
             if recommended_move:
                 return self._convert_move_to_fen(position, recommended_move)
 
+        # Generate moves with fallback
         moves = self._generate_moves(position)
+        
+        # Fallback if no moves generated
+        if not moves:
+            # Last resort: generate all legal moves including pawn moves
+            moves = self._generate_pawn_moves(
+                position, 
+                position.piece_positions['P'][0] if position.white_to_move else position.piece_positions['P'][1],
+                position.white_to_move,
+                position.piece_positions
+            )
+        
+        # If still no moves, return the first valid move or raise an exception
+        if not moves:
+            raise ValueError(f"No legal moves found in position: {fen}")
+
+        # Strategic move selection
         strategy = self._identify_strategy(position)
         ordered_moves = self._order_moves(position, moves, strategy)
         best_move_coords = self._search_best_move(position, ordered_moves)
+
+        # Ensure a move is always returned
+        if best_move_coords is None and moves:
+            best_move_coords = moves[0]  # Fallback to first available move
 
         return (
             self._convert_move_to_fen(position, best_move_coords)

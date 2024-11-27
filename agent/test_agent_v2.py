@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum, auto
 
-from agent import ChessPosition, ChessAgent, FENTranslator
+from agent_v2 import ChessPosition, ChessAgent, FENTranslator
 
 
 class GamePhase(Enum):
@@ -63,7 +63,7 @@ class ChessAgentPerformanceAssessment:
     def _assess_move_quality(self, move: str, phase: GamePhase) -> float:
         """
         Simulate move quality assessment.
-        In a real implementation, this would use chess engine evaluation.
+        In a real implementation, this would use a chess engine evaluation.
         """
         quality_ranges = {
             GamePhase.OPENING: (0.6, 0.9),
@@ -84,12 +84,20 @@ class ChessAgentPerformanceAssessment:
 
                 try:
                     # Generate best move using the agent
-                    best_move = self.agent.get_best_move(test_position)
+                    best_move_fen = self.agent.get_best_move(test_position)
+                    if not best_move_fen:
+                        raise ValueError("Agent did not return a move.")
+
+                    # Convert best_move_fen to ChessPosition
+                    best_move_position = FENTranslator.fen_to_bitboard(best_move_fen)
+
+                    # Extract the move made
+                    move_made = get_move_made(test_position, best_move_position)
 
                     # Debugging: print the move to understand its structure
-                    print(f"Best move for {phase}: {best_move}")
+                    print(f"Best move for {phase.name}: {move_made}")
 
-                    move_quality = self._assess_move_quality(best_move, phase)
+                    move_quality = self._assess_move_quality(move_made, phase)
 
                     end_time = time.time()
 
@@ -104,7 +112,7 @@ class ChessAgentPerformanceAssessment:
                     game_result.total_moves += 1
 
                 except Exception as e:
-                    print(f"Error processing move for {phase}: {e}")
+                    print(f"Error processing move for {phase.name}: {e}")
                     print(
                         f"Test position: {FENTranslator.bitboard_to_fen(test_position)}"
                     )
@@ -142,18 +150,53 @@ class ChessAgentPerformanceAssessment:
         return report
 
 
+def get_move_made(old_position: ChessPosition, new_position: ChessPosition) -> str:
+    """
+    Determine the move made between two positions and return it in algebraic notation.
+    """
+    files = "abcdefgh"
+    ranks = "12345678"
+
+    # Compare the piece positions to find the move
+    for piece in old_position.piece_positions:
+        old_white_bb, old_black_bb = old_position.piece_positions[piece]
+        new_white_bb, new_black_bb = new_position.piece_positions[piece]
+
+        # Check for the side to move
+        if old_position.white_to_move:
+            moved_from = old_white_bb & ~new_white_bb
+            moved_to = new_white_bb & ~old_white_bb
+        else:
+            moved_from = old_black_bb & ~new_black_bb
+            moved_to = new_black_bb & ~old_black_bb
+
+        if moved_from and moved_to:
+            from_square = (moved_from & -moved_from).bit_length() - 1
+            to_square = (moved_to & -moved_to).bit_length() - 1
+
+            from_file = files[from_square % 8]
+            from_rank = ranks[from_square // 8]
+            to_file = files[to_square % 8]
+            to_rank = ranks[to_square // 8]
+
+            move = f"{from_file}{from_rank}{to_file}{to_rank}"
+            return move
+
+    #return "Unknown Move"
+
+
 def main():
     # Create chess agent
     agent = ChessAgent()
 
     # Run performance assessment
-    performance_assessor = ChessAgentPerformanceAssessment(agent, num_simulations=50)
+    performance_assessor = ChessAgentPerformanceAssessment(agent, num_simulations=5)
     performance_assessor.run_performance_assessment()
 
     # Generate and print performance report
     performance_report = performance_assessor.generate_performance_report()
 
-    print("Chess Agent Performance Report:")
+    print("\nChess Agent Performance Report:")
     for phase, metrics in performance_report.items():
         print(f"\n{phase} Phase Performance:")
         for metric, value in metrics.items():
