@@ -1068,7 +1068,7 @@ class ChessPosition:
 
 
 class ChessAgent:
-    def __init__(self, max_depth=12, max_time=5.0):
+    def __init__(self, max_depth=2, max_time=5.0):
         # Integrate multiple components
         self.opening_book = OpeningBook(max_positions=5000)
         self.middlegame_book = MiddlegameBook(max_positions=10000)
@@ -2729,7 +2729,7 @@ def test_chess_agent():
     Test the ChessAgent implementation by simulating a game and assessing the correctness of its decisions.
     """
     # Initialize the chess agent
-    agent = ChessAgent(max_depth=3, max_time=5.0)
+    agent = ChessAgent(max_time=5.0)
 
     # Define test positions in FEN notation
     test_positions = [

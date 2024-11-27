@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum, auto
 
-from agent_v2 import ChessPosition, ChessAgent, FENTranslator
+from agent import ChessPosition, ChessAgent, FENTranslator
 
 class GamePhase(Enum):
     OPENING = auto()

@@ -46,7 +46,7 @@ class GameSimulation:
             self.current_phase = GamePhase.ENDGAME
 
 class ChessAgentPerformanceAssessment:
-    def __init__(self, agent, num_simulations=150, max_moves_per_game=60):
+    def __init__(self, agent, num_simulations=1500, max_moves_per_game=100):
         self.agent = agent
         self.num_simulations = num_simulations
         self.max_moves_per_game = max_moves_per_game
