@@ -7,10 +7,12 @@ from enum import Enum, auto
 
 from agent import ChessPosition, ChessAgent, FENTranslator
 
+
 class GamePhase(Enum):
     OPENING = auto()
     MIDDLEGAME = auto()
     ENDGAME = auto()
+
 
 @dataclass
 class PerformanceMetric:
@@ -20,17 +22,18 @@ class PerformanceMetric:
     tactical_complexity_handled: float = 0.0
     positional_understanding: float = 0.0
     risk_management: float = 0.0
-    
+
     def get_overall_performance(self) -> float:
         """Calculate a weighted performance score."""
         return (
-            0.25 * self.move_quality_score +
-            0.20 * self.strategic_effectiveness +
-            0.15 * self.tactical_complexity_handled +
-            0.15 * self.positional_understanding +
-            0.15 * (1 / (1 + self.calculation_time)) +  # Inverse time penalty
-            0.10 * self.risk_management
+            0.25 * self.move_quality_score
+            + 0.20 * self.strategic_effectiveness
+            + 0.15 * self.tactical_complexity_handled
+            + 0.15 * self.positional_understanding
+            + 0.15 * (1 / (1 + self.calculation_time))
+            + 0.10 * self.risk_management  # Inverse time penalty
         )
+
 
 @dataclass
 class GameSimulationResult:
@@ -43,6 +46,7 @@ class GameSimulationResult:
         if not self.game_phase_metrics:
             for phase in GamePhase:
                 self.game_phase_metrics[phase] = PerformanceMetric()
+
 
 class ChessAgentPerformanceAssessment:
     def __init__(self, agent, num_simulations=100):
@@ -70,20 +74,20 @@ class ChessAgentPerformanceAssessment:
                 "K7/P7/8/8/8/8/8/k7 w - -",
                 "8/3b4/8/2pP4/2PK4/8/8/2k5 w - -",
                 "4K3/8/8/8/3k4/8/5R2/8 w - -",
-            ]
+            ],
         }
-        
+
         fen = random.choice(phase_positions[phase])
         return FENTranslator.fen_to_bitboard(fen)
 
     def _assess_move_quality(self, move: str, phase: GamePhase) -> float:
         """
         Simulate move quality assessment with phase-specific ranges.
-        
+
         Args:
             move (str): The move made
             phase (GamePhase): The current game phase
-        
+
         Returns:
             float: A quality score between 0 and 1
         """
@@ -92,7 +96,7 @@ class ChessAgentPerformanceAssessment:
             GamePhase.MIDDLEGAME: (0.5, 0.8),
             GamePhase.ENDGAME: (0.7, 0.95),
         }
-        
+
         min_qual, max_qual = quality_ranges[phase]
         return random.uniform(min_qual, max_qual)
 
@@ -108,7 +112,7 @@ class ChessAgentPerformanceAssessment:
                 try:
                     # Generate best move using the agent
                     best_move_fen = self.agent.get_best_move(test_position)
-                    
+
                     # Check if a move was returned
                     if not best_move_fen:
                         print(f"No move found for {phase.name}")
@@ -130,18 +134,18 @@ class ChessAgentPerformanceAssessment:
                         calculation_time=end_time - start_time,
                         strategic_effectiveness=random.uniform(0.5, 0.9),
                         tactical_complexity_handled=random.uniform(0.4, 0.9),
-                        positional_understanding=random.uniform(0.5, 0.9),  
+                        positional_understanding=random.uniform(0.5, 0.9),
                         risk_management=random.uniform(0.4, 0.9),
                     )
-
-
 
                     game_result.game_phase_metrics[phase] = performance_metric
                     game_result.total_moves += 1
 
                 except Exception as e:
                     print(f"Error processing move for {phase.name}: {e}")
-                    print(f"Test position: {FENTranslator.bitboard_to_fen(test_position)}")
+                    print(
+                        f"Test position: {FENTranslator.bitboard_to_fen(test_position)}"
+                    )
 
             self.simulation_results.append(game_result)
 
@@ -150,41 +154,61 @@ class ChessAgentPerformanceAssessment:
     def generate_performance_report(self) -> Dict[str, Any]:
         """Generate a comprehensive performance report with detailed insights."""
         phase_metrics = {phase: [] for phase in GamePhase}
-        
+
         for result in self.simulation_results:
             for phase, metric in result.game_phase_metrics.items():
                 phase_metrics[phase].append(metric)
-        
-        report = {
-            "overall_performance": {},
-            "phase_performance": {}
-        }
-        
+
+        report = {"overall_performance": {}, "phase_performance": {}}
+
         for phase, metrics in phase_metrics.items():
             if metrics:
                 performance_scores = [m.get_overall_performance() for m in metrics]
-                
-                report["phase_performance"][phase.name] = {
-                    "avg_overall_performance": sum(performance_scores) / len(performance_scores),
-                    "detailed_metrics": {
-                        "move_quality": sum(m.move_quality_score for m in metrics) / len(metrics),
-                        "strategic_effectiveness": sum(m.strategic_effectiveness for m in metrics) / len(metrics),
-                        "tactical_complexity": sum(m.tactical_complexity_handled for m in metrics) / len(metrics),
-                        "positional_understanding": sum(m.positional_understanding for m in metrics) / len(metrics),  # Add this line
-                        "calculation_speed": sum(1 / (1 + m.calculation_time) for m in metrics) / len(metrics),
-                        "risk_management": sum(m.risk_management for m in metrics) / len(metrics),
-                    },
 
+                report["phase_performance"][phase.name] = {
+                    "avg_overall_performance": sum(performance_scores)
+                    / len(performance_scores),
+                    "detailed_metrics": {
+                        "move_quality": sum(m.move_quality_score for m in metrics)
+                        / len(metrics),
+                        "strategic_effectiveness": sum(
+                            m.strategic_effectiveness for m in metrics
+                        )
+                        / len(metrics),
+                        "tactical_complexity": sum(
+                            m.tactical_complexity_handled for m in metrics
+                        )
+                        / len(metrics),
+                        "positional_understanding": sum(
+                            m.positional_understanding for m in metrics
+                        )
+                        / len(metrics),  # Add this line
+                        "calculation_speed": sum(
+                            1 / (1 + m.calculation_time) for m in metrics
+                        )
+                        / len(metrics),
+                        "risk_management": sum(m.risk_management for m in metrics)
+                        / len(metrics),
+                    },
                     "performance_variability": {
-                        "standard_deviation": statistics.stdev(performance_scores) if len(performance_scores) > 1 else 0
-                    }
+                        "standard_deviation": statistics.stdev(performance_scores)
+                        if len(performance_scores) > 1
+                        else 0
+                    },
                 }
-        
+
         # Calculate overall agent performance
-        overall_scores = [score for phase in report["phase_performance"].values() for score in phase["detailed_metrics"].values()]
-        report["overall_performance"]["avg_score"] = sum(overall_scores) / len(overall_scores)
-        
+        overall_scores = [
+            score
+            for phase in report["phase_performance"].values()
+            for score in phase["detailed_metrics"].values()
+        ]
+        report["overall_performance"]["avg_score"] = sum(overall_scores) / len(
+            overall_scores
+        )
+
         return report
+
 
 def get_move_made(old_position: ChessPosition, new_position: ChessPosition) -> str:
     """
@@ -219,6 +243,7 @@ def get_move_made(old_position: ChessPosition, new_position: ChessPosition) -> s
 
     return "Unknown Move"
 
+
 def main():
     # Create chess agent
     agent = ChessAgent()
@@ -235,10 +260,17 @@ def main():
         print(f"\n{phase} Phase Performance:")
         for metric, value in metrics["detailed_metrics"].items():
             print(f"  {metric.replace('_', ' ').title()}: {value:.3f}")
-        print(f"  Average Overall Performance: {metrics['avg_overall_performance']:.3f}")
-        print(f"  Performance Variability: {metrics['performance_variability']['standard_deviation']:.3f}")
+        print(
+            f"  Average Overall Performance: {metrics['avg_overall_performance']:.3f}"
+        )
+        print(
+            f"  Performance Variability: {metrics['performance_variability']['standard_deviation']:.3f}"
+        )
 
-    print(f"\nOverall Agent Performance: {performance_report['overall_performance']['avg_score']:.3f}")
+    print(
+        f"\nOverall Agent Performance: {performance_report['overall_performance']['avg_score']:.3f}"
+    )
+
 
 if __name__ == "__main__":
     main()

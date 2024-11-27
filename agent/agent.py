@@ -1087,7 +1087,6 @@ class ChessAgent:
         file, rank = coord
         return rank * 8 + file
 
-
     def get_best_move(self, position: ChessPosition) -> Optional[str]:
         """
         Integrated move selection strategy with FEN-style move output
@@ -1129,17 +1128,19 @@ class ChessAgent:
 
         # Generate moves with fallback
         moves = self._generate_moves(position)
-        
+
         # Fallback if no moves generated
         if not moves:
             # Last resort: generate all legal moves including pawn moves
             moves = self._generate_pawn_moves(
-                position, 
-                position.piece_positions['P'][0] if position.white_to_move else position.piece_positions['P'][1],
+                position,
+                position.piece_positions["P"][0]
+                if position.white_to_move
+                else position.piece_positions["P"][1],
                 position.white_to_move,
-                position.piece_positions
+                position.piece_positions,
             )
-        
+
         # If still no moves, return the first valid move or raise an exception
         if not moves:
             raise ValueError(f"No legal moves found in position: {fen}")
@@ -1172,7 +1173,6 @@ class ChessAgent:
             move = (from_square, to_square)
         new_position = self._simulate_move(position, move)
         return new_position.to_fen()
-
 
     # => <= #
     def _generate_moves(self, position: ChessPosition) -> List[Tuple[int, int]]:
@@ -1276,6 +1276,7 @@ class ChessAgent:
         )
 
         return moves
+
     def _bitboard_to_squares(self, bitboard: int) -> List[int]:
         """
         Convert a bitboard to a list of square indices.
@@ -1289,7 +1290,9 @@ class ChessAgent:
             temp_bb &= temp_bb - 1
         return squares
 
-    def _generate_moves_from_bitboards(self, from_bb: int, to_bb: int, shift: int) -> List[Tuple[int, int]]:
+    def _generate_moves_from_bitboards(
+        self, from_bb: int, to_bb: int, shift: int
+    ) -> List[Tuple[int, int]]:
         """
         Generate moves from bitboards, given a shift direction.
         """
@@ -1299,7 +1302,9 @@ class ChessAgent:
         moves.extend(zip(from_squares, to_squares))
         return moves
 
-    def _generate_pawn_promotions(self, promotion_bb: int, shift: int) -> List[Tuple[int, int, str]]:
+    def _generate_pawn_promotions(
+        self, promotion_bb: int, shift: int
+    ) -> List[Tuple[int, int, str]]:
         """
         Generate pawn promotion moves.
         """
@@ -1307,7 +1312,7 @@ class ChessAgent:
         from_squares = self._bitboard_to_squares(promotion_bb)
         to_squares = [sq + shift for sq in from_squares if 0 <= sq + shift < 64]
         for from_sq, to_sq in zip(from_squares, to_squares):
-            for promotion_piece in ['Q', 'R', 'B', 'N']:
+            for promotion_piece in ["Q", "R", "B", "N"]:
                 moves.append((from_sq, to_sq, promotion_piece))
         return moves
 
@@ -1326,7 +1331,9 @@ class ChessAgent:
             temp_to_bb &= temp_to_bb - 1
         return moves
 
-    def _generate_promotions(self, to_bb: int, shift: int) -> List[Tuple[int, int, str]]:
+    def _generate_promotions(
+        self, to_bb: int, shift: int
+    ) -> List[Tuple[int, int, str]]:
         """
         Generate pawn promotion moves.
         """
@@ -1337,7 +1344,7 @@ class ChessAgent:
             to_square = lsb.bit_length() - 1
             from_square = to_square - shift
             if 0 <= from_square < 64 and 0 <= to_square < 64:
-                for promotion_piece in ['Q', 'R', 'B', 'N']:
+                for promotion_piece in ["Q", "R", "B", "N"]:
                     moves.append((from_square, to_square, promotion_piece))
             temp_to_bb &= temp_to_bb - 1
         return moves
@@ -1386,7 +1393,9 @@ class ChessAgent:
                 ep_right = ((pawns_bb << 9) & en_passant_bb) & ~FILE_H
                 ep_captures = ep_left | ep_right
                 if ep_captures:
-                    from_squares = self._bitboard_to_squares((ep_captures >> 7) & pawns_bb) + self._bitboard_to_squares((ep_captures >> 9) & pawns_bb)
+                    from_squares = self._bitboard_to_squares(
+                        (ep_captures >> 7) & pawns_bb
+                    ) + self._bitboard_to_squares((ep_captures >> 9) & pawns_bb)
                     to_squares = [en_passant_square] * len(from_squares)
                     en_passant_moves.extend(zip(from_squares, to_squares))
 
@@ -1428,7 +1437,9 @@ class ChessAgent:
                 ep_right = ((pawns_bb >> 7) & en_passant_bb) & ~FILE_A
                 ep_captures = ep_left | ep_right
                 if ep_captures:
-                    from_squares = self._bitboard_to_squares((ep_captures << 9) & pawns_bb) + self._bitboard_to_squares((ep_captures << 7) & pawns_bb)
+                    from_squares = self._bitboard_to_squares(
+                        (ep_captures << 9) & pawns_bb
+                    ) + self._bitboard_to_squares((ep_captures << 7) & pawns_bb)
                     to_squares = [en_passant_square] * len(from_squares)
                     en_passant_moves.extend(zip(from_squares, to_squares))
 
@@ -1445,7 +1456,6 @@ class ChessAgent:
             moves.extend(en_passant_moves)
 
         return moves
-
 
     def _bitboard_to_moves(self, from_bb, to_bb) -> List[Tuple[int, int]]:
         """
@@ -1472,12 +1482,11 @@ class ChessAgent:
         while temp_from_bb and temp_to_bb:
             from_square = (temp_from_bb & -temp_from_bb).bit_length() - 1
             to_square = (temp_to_bb & -temp_to_bb).bit_length() - 1
-            for promotion_piece in ['Q', 'R', 'B', 'N']:
+            for promotion_piece in ["Q", "R", "B", "N"]:
                 moves.append((from_square, to_square, promotion_piece))
             temp_from_bb &= temp_from_bb - 1
             temp_to_bb &= temp_to_bb - 1
         return moves
-
 
     def _generate_knight_moves(
         self, knights_bb, friendly_occupancy, enemy_occupancy
@@ -1542,7 +1551,6 @@ class ChessAgent:
             attacks |= self._ray_attacks(square, occupancy, direction)
         return attacks
 
-
     def _generate_rook_moves(
         self, rooks_bb, friendly_occupancy, enemy_occupancy, total_occupancy
     ) -> List[Tuple[int, int]]:
@@ -1570,7 +1578,6 @@ class ChessAgent:
             attacks |= self._ray_attacks(square, occupancy, direction)
         return attacks
 
-
     def _generate_queen_moves(
         self, queens_bb, friendly_occupancy, enemy_occupancy, total_occupancy
     ) -> List[Tuple[int, int]]:
@@ -1592,7 +1599,9 @@ class ChessAgent:
         return moves
 
     def _queen_attacks(self, square: int, occupancy: int) -> int:
-        return self._rook_attacks(square, occupancy) | self._bishop_attacks(square, occupancy)
+        return self._rook_attacks(square, occupancy) | self._bishop_attacks(
+            square, occupancy
+        )
 
     def _ray_attacks(self, square: int, occupancy: int, direction: int) -> int:
         """
@@ -1601,14 +1610,14 @@ class ChessAgent:
         """
         attacks = 0
         directions = {
-            1: 1,    # Right
+            1: 1,  # Right
             -1: -1,  # Left
-            7: -9,   # Diagonal up-left
-            9: -7,   # Diagonal up-right
-            -7: 9,   # Diagonal down-right
-            -9: 7,   # Diagonal down-left
-            8: -8,   # Up
-            -8: 8    # Down
+            7: -9,  # Diagonal up-left
+            9: -7,  # Diagonal up-right
+            -7: 9,  # Diagonal down-right
+            -9: 7,  # Diagonal down-left
+            8: -8,  # Up
+            -8: 8,  # Down
         }
 
         step = directions.get(direction, 0)
@@ -1625,29 +1634,29 @@ class ChessAgent:
                 break
 
             current_square += step
-            
+
             # Break to prevent going off the board
             if not (0 <= current_square < 64):
                 break
 
         return attacks
 
-
-
-    def _are_squares_aligned(self, start_square: int, end_square: int, direction: int) -> bool:
+    def _are_squares_aligned(
+        self, start_square: int, end_square: int, direction: int
+    ) -> bool:
         """
         Check if two squares are aligned in the given direction.
         Implement using an iterative approach to avoid recursion.
         """
         directions = {
-            1: 1,    # Right
+            1: 1,  # Right
             -1: -1,  # Left
-            7: -9,   # Diagonal up-left
-            9: -7,   # Diagonal up-right
-            -7: 9,   # Diagonal down-right
-            -9: 7,   # Diagonal down-left
-            8: -8,   # Up
-            -8: 8    # Down
+            7: -9,  # Diagonal up-left
+            9: -7,  # Diagonal up-right
+            -7: 9,  # Diagonal down-right
+            -9: 7,  # Diagonal down-left
+            8: -8,  # Up
+            -8: 8,  # Down
         }
 
         diff = abs(end_square - start_square)
@@ -1666,7 +1675,6 @@ class ChessAgent:
             current_square += step
 
         return False
-
 
     def _generate_king_moves(
         self, position, king_bb, friendly_occupancy, enemy_occupancy, total_occupancy
@@ -1773,7 +1781,6 @@ class ChessAgent:
             depth += 1
         return best_move
 
-
     def _alpha_beta(
         self,
         position: ChessPosition,
@@ -1829,7 +1836,9 @@ class ChessAgent:
             self.transposition_table[position_key] = {"value": min_eval, "depth": depth}
             return min_eval, best_move
 
-    def _quiescence_search(self, position: ChessPosition, alpha: float, beta: float, depth: int = 3) -> float:
+    def _quiescence_search(
+        self, position: ChessPosition, alpha: float, beta: float, depth: int = 3
+    ) -> float:
         """
         Quiescence search with a maximum depth to prevent infinite recursion.
         """
@@ -1846,7 +1855,11 @@ class ChessAgent:
             alpha = stand_pat
 
         moves = self._generate_moves(position)
-        moves = [move for move in moves if self._is_capture(position, move) and self._is_valid_move(move)]
+        moves = [
+            move
+            for move in moves
+            if self._is_capture(position, move) and self._is_valid_move(move)
+        ]
 
         for move in moves:
             if time.time() - self.start_time > self.max_time:
@@ -1862,8 +1875,6 @@ class ChessAgent:
     def _is_valid_move(self, move: Tuple[int, int]) -> bool:
         from_square, to_square = move[:2]
         return 0 <= from_square < 64 and 0 <= to_square < 64
-
-    
 
     def _evaluate_position(self, position: ChessPosition) -> float:
         """
@@ -2441,7 +2452,6 @@ class ChessAgent:
         else:
             return "endgame"
 
-
     def _is_capture(self, position: ChessPosition, move: Tuple[int, int]) -> bool:
         from_square, to_square = move[:2]
         if not (0 <= to_square < 64):
@@ -2449,17 +2459,14 @@ class ChessAgent:
             return False
         opponent_bb = (
             sum(
-                position.piece_positions[piece][1]
-                for piece in position.piece_positions
+                position.piece_positions[piece][1] for piece in position.piece_positions
             )
             if position.white_to_move
             else sum(
-                position.piece_positions[piece][0]
-                for piece in position.piece_positions
+                position.piece_positions[piece][0] for piece in position.piece_positions
             )
         )
         return (1 << to_square) & opponent_bb != 0
-
 
     def _is_promotion(self, position: ChessPosition, move: Tuple[int, int]) -> bool:
         """
@@ -2471,7 +2478,6 @@ class ChessAgent:
             promotion_rank = 7 if position.white_to_move else 0
             return to_square // 8 == promotion_rank
         return False
-
 
     def _is_check(self, position: ChessPosition, move: Tuple[int, int]) -> bool:
         """
@@ -2505,13 +2511,11 @@ class ChessAgent:
             return None  # Invalid square index
 
         for piece, (white_bb, black_bb) in position.piece_positions.items():
-            if (white_bb & (1 << square)):
+            if white_bb & (1 << square):
                 return piece
-            if (black_bb & (1 << square)):
+            if black_bb & (1 << square):
                 return piece.lower()  # Lowercase for black pieces
         return None
-
-
 
     def _aligns_with_strategy(self, move: Tuple[int, int], strategy: dict) -> bool:
         """
@@ -2555,7 +2559,6 @@ class ChessAgent:
 
         # Default to true if none of the above
         return False
-
 
     def _is_near_center(self, square: int) -> bool:
         """
@@ -2720,9 +2723,11 @@ class ChessAgent:
 
         return control_score
 
+
 """
 TESTING
 """
+
 
 def test_chess_agent():
     """
@@ -2758,7 +2763,7 @@ def test_chess_agent():
     for test in test_positions:
         print(f"\nTesting position: {test['description']}")
         # Convert FEN to bitboard position
-        position = FENTranslator.fen_to_bitboard(test['fen'])
+        position = FENTranslator.fen_to_bitboard(test["fen"])
         agent.current_position = position  # Set the current position for the agent
 
         # Get the best move from the agent
@@ -2774,14 +2779,15 @@ def test_chess_agent():
             print("Agent did not find a move.")
 
         # Check if the move matches the expected best move (if provided)
-        if test['expected_best_move']:
-            if move_made == test['expected_best_move']:
+        if test["expected_best_move"]:
+            if move_made == test["expected_best_move"]:
                 print("Test Passed: Agent made the expected move.")
             else:
                 print("Test Failed: Agent did not make the expected move.")
                 print(f"Expected Move: {test['expected_best_move']}")
         else:
             print("No expected move specified for this test case.")
+
 
 def get_move_made(old_position: ChessPosition, new_position: ChessPosition) -> str:
     """
@@ -2817,6 +2823,6 @@ def get_move_made(old_position: ChessPosition, new_position: ChessPosition) -> s
 
     return "Unknown Move"
 
+
 if __name__ == "__main__":
     test_chess_agent()
-
