@@ -13,8 +13,8 @@ class StrategicChessAgent:
     
     # Piece value constants
     PIECE_VALUES = {
-        'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000,
-        'p': -100, 'n': -320, 'b': -330, 'r': -500, 'q': -900, 'k': -20000
+        'P': 100, 'N': 1320, 'B': 1330, 'R': 1500, 'Q': 1900, 'K': 20000,
+        'p': -100, 'n': -1320, 'b': -1330, 'r': -1500, 'q': -1900, 'k': -20000
     }
 
     def __init__(self, max_search_depth=4):
@@ -72,7 +72,7 @@ class StrategicChessAgent:
 
             # 5. Check and Checkmate threats
             if self.is_check(test_game, game.turn):
-                score += 300 if not in_endgame else 500  # Higher bonus in endgame
+                score += 800 if not in_endgame else 1600  # Higher bonus in endgame
 
             # 6. Piece Activity: Mobility with increased weight for active pieces
             mobility_score = self.evaluate_mobility(test_game, game.turn)
@@ -100,7 +100,7 @@ class StrategicChessAgent:
 
             # 12. Bottleneck Creation: Aggressively reward moves that create bottlenecks
             bottleneck_score = self.evaluate_bottleneck(test_game, game.turn)
-            score += bottleneck_score * (2.0 if not in_endgame else 3.0)  # Higher weight for aggressive bottlenecking
+            score += bottleneck_score * (8.0 if not in_endgame else 16.0)  # Higher weight for aggressive bottlenecking
 
             # 13. Aggressive Defense: Reward moves that strengthen defenses
             aggressive_defense_score = self.evaluate_aggressive_defense(test_game, game.turn, in_endgame)
@@ -1455,7 +1455,7 @@ class StrategicChessAgent:
         # Evaluate moves
         evaluated_moves = [
             (self.evaluate_move(game, move), move) 
-            for move in moves[:20]  # Increased limit for deeper search
+            for move in moves[:10]  # Increased limit for deeper search
         ]
         
         # Sort moves by score, descending
