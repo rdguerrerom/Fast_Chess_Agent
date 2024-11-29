@@ -1,7 +1,41 @@
-%%writefile main.py
+%%writefile submission.py
 from Chessnut import Game
 import random
 import math
+
+def memoize(func):
+    """
+    A decorator to implement memoization with a configurable cache size.
+    
+    Args:
+        func (callable): The function to be memoized
+    
+    Returns:
+        callable: Memoized version of the function
+    """
+    cache = {}
+    max_cache_size = 1000  # Configurable cache size limit
+    
+    def memoized_func(*args, **kwargs):
+        # Create a hashable key from arguments
+        key = str(args) + str(kwargs)
+        
+        # Check if result is in cache
+        if key in cache:
+            return cache[key]
+        
+        # Compute and cache result
+        result = func(*args, **kwargs)
+        
+        # Manage cache size
+        if len(cache) >= max_cache_size:
+            cache.popitem()  # Remove oldest entry
+        
+        cache[key] = result
+        return result
+    
+    return memoized_func
+
 
 class StrategicChessAgent:
     """
@@ -10,7 +44,6 @@ class StrategicChessAgent:
     techniques to identify zugzwang scenarios, create aggressive bottlenecks, 
     and incorporate long-term aggressive strategic planning to dominate the match.
     """
-    
     # Piece value constants
     PIECE_VALUES = {
         'P': 100, 'N': 1320, 'B': 1330, 'R': 1500, 'Q': 1900, 'K': 20000,
@@ -24,6 +57,12 @@ class StrategicChessAgent:
         Args:
             max_search_depth (int): Maximum depth for move evaluation
         """
+        # Memoization cache for move evaluations
+        self.move_cache = {}  
+        # Probabilistic move prediction
+        self.opponent_move_probability = {}  
+        # Memoization cache specifically for move sequences
+        self.move_sequence_cache = {}    
         self.max_search_depth = max_search_depth
         self.opening_moves = {
             'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1': 
@@ -1428,7 +1467,7 @@ class StrategicChessAgent:
 
         return score
 
-    def select_strategic_move(self, board_fen):
+    def select_strategic_move_old(self, board_fen):
         """
         Select the most strategic move for the current board state.
         
@@ -1464,6 +1503,67 @@ class StrategicChessAgent:
         # Return top move
         return evaluated_moves[0][1]
 
+    def select_strategic_move(self, board_fen):
+        """
+        Advanced strategic move selection with multi-tier evaluation.
+        
+        Args:
+            board_fen (str): Current board state in FEN notation
+        
+        Returns:
+            str: Selected strategic move
+        """
+        # 1. Opening Book Priority
+        if board_fen in self.opening_moves:
+            return random.choice(self.opening_moves[board_fen])
+
+        # 2. Create game instance
+        game = Game(board_fen)
+        moves = list(game.get_moves())
+        
+        if not moves:
+            return 'e2e4'  # Fallback move
+        
+        # 3. Advanced Probabilistic Move Selection
+        try:
+            # Attempt advanced move prediction
+            predicted_moves = self.predict_opponent_moves(game)
+            
+            if predicted_moves:
+                # Evaluate moves considering opponent prediction
+                move_evaluations = [
+                    (
+                        self.evaluate_move(game, move['initial_move']), 
+                        move['initial_move'],
+                        move['probability'],
+                        move['strategic_score']
+                    ) 
+                    for move in predicted_moves[:5]  # Top 5 predicted moves
+                ]
+                
+                # Multi-factor sorting
+                move_evaluations.sort(
+                    key=lambda x: (x[0], x[2], x[3]), 
+                    reverse=True
+                )
+                
+                return move_evaluations[0][1]
+        
+        except Exception as e:
+            # Fallback to original evaluation if advanced prediction fails
+            pass
+        
+        # 4. Traditional Move Evaluation
+        evaluated_moves = [
+            (self.evaluate_move(game, move), move) 
+            for move in moves[:10]
+        ]
+        
+        # Sort and return top move
+        evaluated_moves.sort(reverse=True)
+        return evaluated_moves[0][1]
+
+
     def evaluate_piece_coordination(self, game, turn):
         """
         Evaluate how well the pieces support each other.
@@ -1491,6 +1591,222 @@ class StrategicChessAgent:
                     score += 10  # Reward for attacking and supporting other pieces
         return score
 
+# => <= #
+
+    def predict_opponent_moves(self, game, look_ahead_depth=4):
+        """
+        Predict and evaluate potential opponent moves with probabilistic weighting.
+        
+        Args:
+            game (Game): Current game state
+            look_ahead_depth (int): Number of future moves to analyze
+        
+        Returns:
+            list: Ranked list of probable opponent move sequences
+        """
+        # Check memoization cache first
+        cache_key = (game.get_fen(), look_ahead_depth)
+        if cache_key in self.move_cache:
+            return self.move_cache[cache_key]
+
+        probable_move_sequences = []
+        
+        # Generate all legal opponent moves
+        opponent_moves = game.get_moves()
+        
+        for move in opponent_moves:
+            # Create a hypothetical game state after opponent's move
+            hypothetical_game = Game(game.get_fen())
+            hypothetical_game.apply_move(move)
+            
+            # Evaluate move sequences recursively
+            move_sequence = self.explore_move_sequences(
+                hypothetical_game, 
+                depth=look_ahead_depth-1, 
+                is_maximizing=False
+            )
+            
+            # Calculate move probability and strategic value
+            move_probability = self.calculate_move_probability(move, hypothetical_game)
+            move_sequence_score = self.evaluate_move_sequence(move_sequence)
+            
+            probable_move_sequences.append({
+                'initial_move': move,
+                'sequence': move_sequence,
+                'probability': move_probability,
+                'strategic_score': move_sequence_score
+            })
+        
+        # Sort by strategic score and probability
+        probable_move_sequences.sort(
+            key=lambda x: (x['strategic_score'], x['probability']), 
+            reverse=True
+        )
+        
+        # Cache results
+        self.move_cache[cache_key] = probable_move_sequences
+        
+        return probable_move_sequences
+
+    def calculate_move_probability(self, move, game):
+        """
+        Calculate the probability of a move based on strategic factors.
+        
+        Args:
+            move (str): Chess move notation
+            game (Game): Game state
+        
+        Returns:
+            float: Probability score for the move
+        """
+        # Implement probabilistic move assessment
+        probability_factors = [
+            self.evaluate_tactical_patterns(game, game.turn),
+            self.evaluate_threats(game, game.turn),
+            self.evaluate_positional_factors(game, game.turn, False)
+        ]
+        
+        return sum(probability_factors) / len(probability_factors)
+
+    def evaluate_move_sequence(self, move_sequence):
+        """
+        Evaluate the strategic value of a move sequence.
+        
+        Args:
+            move_sequence (list): Sequence of moves and their evaluations
+        
+        Returns:
+            float: Strategic score for the move sequence
+        """
+        if not move_sequence:
+            return 0
+        
+        # Calculate cumulative strategic score
+        strategic_score = sum(
+            move['evaluation'] * (0.9 ** idx) 
+            for idx, move in enumerate(move_sequence)
+        )
+        
+        return strategic_score
+
+    def select_optimal_move(self, game):
+        """
+        Select the most strategic move considering opponent's probable responses.
+        
+        Args:
+            game (Game): Current game state
+        
+        Returns:
+            str: Best move to execute
+        """
+        # Predict and analyze opponent's probable moves
+        opponent_move_predictions = self.predict_opponent_moves(game)
+        
+        # Evaluate current possible moves
+        current_moves = game.get_moves()
+        move_evaluations = [
+            {
+                'move': move, 
+                'score': self.evaluate_move(game, move),
+                'opponent_response_risk': self.assess_opponent_response_risk(game, move)
+            } 
+            for move in current_moves
+        ]
+        
+        # Sort moves by comprehensive strategic score
+        optimal_moves = sorted(
+            move_evaluations, 
+            key=lambda x: (x['score'], -x['opponent_response_risk']), 
+            reverse=True
+        )
+        
+        return optimal_moves[0]['move'] if optimal_moves else None
+
+    def assess_opponent_response_risk(self, game, move):
+        """
+        Assess the potential risk of a move based on opponent's likely responses.
+        
+        Args:
+            game (Game): Current game state
+            move (str): Proposed move
+        
+        Returns:
+            float: Risk score
+        """
+        hypothetical_game = Game(game.get_fen())
+        hypothetical_game.apply_move(move)
+        
+        opponent_moves = hypothetical_game.get_moves()
+        response_risks = [
+            self.evaluate_move(hypothetical_game, response) 
+            for response in opponent_moves
+        ]
+        
+        return max(response_risks) if response_risks else 0
+
+    def explore_move_sequences(self, game, depth, is_maximizing):
+        """
+        Recursively explore potential move sequences with memoization.
+        
+        Args:
+            game (Game): Current game state
+            depth (int): Remaining look-ahead depth
+            is_maximizing (bool): Whether current player is maximizing
+        
+        Returns:
+            list: Sequence of moves and their evaluations
+        """
+        # Create a unique cache key
+        cache_key = (
+            game.get_fen(),  # Current board state
+            depth,           # Remaining depth
+            is_maximizing    # Current player's turn
+        )
+
+        # Check if result is already cached
+        if cache_key in self.move_sequence_cache:
+            return self.move_sequence_cache[cache_key]
+        
+        # Termination conditions
+        if depth == 0 or game.status in [Game.CHECKMATE, Game.DRAW]:
+            return []
+        
+        move_sequences = []
+        moves = game.get_moves()
+        
+        for move in moves:
+            # Create a copy of the game to avoid state mutation
+            hypothetical_game = Game(game.get_fen())
+            hypothetical_game.apply_move(move)
+            
+            # Recursive exploration with alternating players
+            sub_sequences = self.explore_move_sequences(
+                hypothetical_game, 
+                depth - 1, 
+                not is_maximizing
+            )
+            
+            move_evaluation = self.evaluate_move(game, move)
+            
+            move_sequence_entry = {
+                'move': move,
+                'evaluation': move_evaluation,
+                'sub_sequences': sub_sequences
+            }
+            
+            move_sequences.append(move_sequence_entry)
+        
+        # Cache and return the results
+        self.move_sequence_cache[cache_key] = move_sequences
+        return move_sequences
+
+    def clear_move_sequence_cache(self):
+        """
+        Clear the memoization cache to prevent memory overflow.
+        Useful between different game states or after significant changes.
+        """
+        self.move_sequence_cache.clear()
+# => <= #
 def chess_bot(obs):
     """
     Chess bot interface that provides strategic move selection.
