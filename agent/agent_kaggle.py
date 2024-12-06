@@ -4,6 +4,30 @@ import random
 import math
 import copy
 
+import logging
+
+# Set up logging
+logging.basicConfig(filename="agent_performance.log", level=logging.INFO)
+
+def log_move_evaluation(game, move, score, breakdown):
+    """
+    Log detailed move evaluation for debugging and optimization.
+
+    Args:
+        game (Game): Current game state.
+        move (str): Move evaluated.
+        score (float): Total evaluation score.
+        breakdown (dict): Breakdown of individual weights and scores.
+    """
+    logging.info(f"Move: {move}")
+    logging.info(f"Total Score: {score}")
+    for feature, value in breakdown.items():
+        logging.info(f"{feature}: {value}")
+    logging.info("Board State:")
+    logging.info(game.get_fen())
+    logging.info("-" * 50)
+
+
 def memoize(func):
     """
     A decorator to implement memoization with a configurable cache size.
@@ -65,6 +89,7 @@ class StrategicChessAgent:
         # Memoization cache specifically for move sequences
         self.move_sequence_cache = {}    
         self.max_search_depth = max_search_depth
+        self.move_count = 0  # Initialize move counter
         self.opening_moves = {
             'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1': ['e2e4', 'd2d4', 'c2c4', 'g1f3'],
             # Open Games
@@ -123,6 +148,12 @@ class StrategicChessAgent:
             '1Nf3': ['d5', 'Nf6']
         }
 
+    def increment_move_count(self):
+        """
+        Increment the move counter after a move is made.
+        """
+        self.move_count += 1
+
     def simplify_fen(self, fen):
         """
         Simplify a FEN string by removing unnecessary details.
@@ -165,158 +196,55 @@ class StrategicChessAgent:
         legal_moves = game.get_moves()
         return self.dynamic_opening_strategy(game, legal_moves)
 
-
     def evaluate_move(self, game, move):
-        """
-        Evaluate a potential move with an aggressive strategy, emphasizing tactical advantages,
-        offensive capabilities, and strategic long-term winning potential.
-        
-        Args:
-            game (Game): Current game state
-            move (str): Move to evaluate
-        
-        Returns:
-            float: Move evaluation score with increased aggression and tactical focus
-        """
+        breakdown = {}
         score = 0
-
+    
         try:
+            # Simulate the move
             test_game = Game(game.get_fen())
             test_game.apply_move(move)
-
-            # Detect game stage
-            in_endgame = self.is_endgame(test_game, game.turn)
-
-            # Collaborative checkmate evaluation
-            score += self.evaluate_checkmate_coordination(test_game, game.turn)*5.0
-
-
-            # Detect queen moves and evaluate potential
-            moving_piece = game.board.get_piece(Game.xy2i(move[:2]))
-            if moving_piece.lower() == 'q':  # Queen move
-                queen_pos = Game.xy2i(move[2:4])
-                score += self.evaluate_queen_potential(test_game, queen_pos, game.turn)
-
-            # Detect second-rank piece moves
             moving_piece = game.board.get_piece(Game.xy2i(move[:2]))
             new_pos = Game.xy2i(move[2:4])
-
-            if moving_piece.lower() == 'r':  # Rook
-                score += self.evaluate_rook_potential(test_game, new_pos, game.turn)
-            elif moving_piece.lower() == 'n':  # Knight
-                score += self.evaluate_knight_potential(test_game, new_pos, game.turn)
-            elif moving_piece.lower() == 'b':  # Bishop
-                score += self.evaluate_bishop_potential(test_game, new_pos, game.turn)
-
-
-            # 1. Key square coordination for high-rank pieces
-            key_square_score = self.evaluate_piece_on_key_squares(test_game, game.turn)
-            score += key_square_score * (2.0 if in_endgame else 1.5)
-            # 2. Immediate Pawn Promotion (Highest Priority)
-            if move[1] in ['7', '2'] and move[3] in ['8', '1']:
-                score += 2000  # High reward for immediate promotion
-
-            score += self.evaluate_piece_coordination(test_game, game.turn) * 3.0
-            score += self.evaluate_control_of_key_squares(test_game, game.turn) * 5.5
-            score += self.evaluate_checkmate_coordination(test_game, game.turn) * 4.0
-
-            if in_endgame:
-                score += self.evaluate_rook_potential(test_game, new_pos, game.turn) * 2.0
-                score += self.evaluate_knight_potential(test_game, new_pos, game.turn) * 1.5
-                score += self.evaluate_bishop_potential(test_game, new_pos, game.turn) * 1.5
-            else:
-                score += self.evaluate_rook_potential(test_game, new_pos, game.turn) * 1.5
-                score += self.evaluate_knight_potential(test_game, new_pos, game.turn) * 2.0
-                score += self.evaluate_bishop_potential(test_game, new_pos, game.turn) * 2.0
-
-
-            # 3. Evaluate pawn advancement and coordination
-            moving_piece = game.board.get_piece(Game.xy2i(move[:2]))
-            if moving_piece.lower() == 'p':  # If the move involves a pawn
-                pawn_advancement_score = self.evaluate_coordinated_pawn_advancement(test_game, game.turn)
-                score += pawn_advancement_score * (2.0 if in_endgame else 1.5)
-
-            # 4. Aggressive Capture Evaluation
-            captured_piece = game.board.get_piece(Game.xy2i(move[2:4]))
+            in_endgame = self.is_endgame(test_game, game.turn)
+    
+            # Checkmate Acceleration
+            checkmate_bonus = 30000 * max(1, (100 - self.move_count) / 100)
+            breakdown["Checkmate Acceleration"] = checkmate_bonus if test_game.status == Game.CHECKMATE else 0
+            score += breakdown["Checkmate Acceleration"]
+    
+            # Tactical Opportunities
+            tactical_score = self.evaluate_tactical_patterns(test_game, game.turn) * 10.0
+            breakdown["Tactical Opportunities"] = tactical_score
+            score += tactical_score
+    
+            # Aggressive Capture Evaluation
+            captured_piece = game.board.get_piece(new_pos)
+            capture_bonus = 0
             if captured_piece != ' ':
-                capture_bonus = 1500 + self.PIECE_VALUES[captured_piece]
-                score += capture_bonus
-
-            # 5. Enhanced Threats Evaluation
-            threats_score = self.evaluate_threats(test_game, game.turn)
-            score += threats_score * (3.0 if not in_endgame else 4.0)
-
-            # 6. Dynamic Piece Mobility
-            mobility_score = self.evaluate_mobility(test_game, game.turn)
-            score += mobility_score * (2.0 if not in_endgame else 2.5)
-
-            # 7. King Safety
-            king_safety_score = self.evaluate_king_safety(test_game, game.turn)
-            score += king_safety_score * 2.0
-
-            # 8. King Safety (Balanced Consideration)
-            king_safety_score = self.evaluate_king_safety(test_game, game.turn)
-            score += king_safety_score * 1.2
-
-            # 9. Pawn Structure with Strategic Nuance
-            pawn_structure_score = self.evaluate_pawn_structure(test_game, game.turn, in_endgame)
-            score += pawn_structure_score * (1.0 if not in_endgame else 1.5)
-
-            # 10. Positional Strategy with Offensive Orientation
-            positional_score = self.evaluate_positional_factors(test_game, game.turn, in_endgame)
-            score += positional_score * (1.2 if not in_endgame else 2.0)
-
-            # 11. Enhanced Endgame Considerations
-            endgame_score = self.evaluate_endgame(test_game, game.turn, in_endgame)
-            score += endgame_score * 1.5
-
-            # 12. Deep Search Minimax Evaluation
-            if in_endgame:
-                minimax_score = self.minimax(test_game, self.choose_search_depth(), -math.inf, math.inf, False)
-            else:
-                minimax_score = self.minimax(test_game, self.choose_search_depth(), -math.inf, math.inf, False)
-            score += minimax_score * 3.0
-
-            # 13. Ultra-Aggressive Bottleneck Creation
-            bottleneck_score = self.evaluate_bottleneck(test_game, game.turn)* (20.0 if not in_endgame else 40.0)
-            score += bottleneck_score * (12.0 if not in_endgame else 24.0)
-
-            # 14. Strategic Offensive Defense
-            aggressive_defense_score = self.evaluate_aggressive_defense(test_game, game.turn, in_endgame)
-            score += aggressive_defense_score * (3.0 if in_endgame else 2.5)
-
-            # 15. Long-Term Strategic Dominance Planning
-            strategic_planning_score = self.evaluate_strategic_planning(test_game, game.turn)
-            score += strategic_planning_score * 5.0
-
-            # 16. Piece Value Consideration with Offensive Weighting
-            piece = game.board.get_piece(Game.xy2i(move[0:2]))
-            score += self.PIECE_VALUES.get(piece, 0) * 1.5
-
-            # 17. Strategic Unpredictability Factor
-            score += random.random() * 50
-
-            # Integrate proactivity evaluation
-            score += self.evaluate_proactivity(game, move, game.turn)*1.2
-
-            # Update the endgame scoring section
-            if in_endgame:
-                # Dramatically increase weights for checkmate-oriented metrics
-                score += self.calculate_checkmate_acceleration_bonus(test_game, game.turn) * 10.0
-                score += endgame_score * 3.0  # Increased endgame score weight
-                score += threats_score * 4.0  # More emphasis on threatening moves
-                score += tactical_score * 5.0  # Higher tactical pattern importance
-
-                # Endgame-specific evaluations
-                score += self.evaluate_endgame_checkmate_potential(test_game, game.turn)
-                score += self.evaluate_king_pawn_coordination(test_game, game.turn)
-
-
+                capture_bonus = 5000 + self.PIECE_VALUES[captured_piece]
+            breakdown["Capture Bonus"] = capture_bonus
+            score += capture_bonus
+    
+            # King Safety
+            king_safety_score = self.evaluate_king_safety(test_game, game.turn) * 3.0
+            breakdown["King Safety"] = king_safety_score
+            score += king_safety_score
+    
+            # Opponent Threat Mitigation
+            opponent_threats = self.evaluate_opponent_threats(test_game, game.turn) * 10.0
+            breakdown["Opponent Threats"] = -opponent_threats
+            score -= opponent_threats
+    
+            # Log the evaluation
+            log_move_evaluation(game, move, score, breakdown)
+    
         except Exception as e:
-            # Robust Fallback Scoring
+            # Fallback score in case of error
             score = random.random() * 10
-
+    
         return score
+
 
 
     def calculate_checkmate_acceleration_bonus(self, test_game, turn):
@@ -413,11 +341,11 @@ class StrategicChessAgent:
 
         # Pawn Structure
         pawn_structure = self.evaluate_pawn_structure(game, game.turn, in_endgame)
-        score += pawn_structure * (0.8 if not in_endgame else 1.2)
+        score += pawn_structure * (1.3 if not in_endgame else 1.2)
 
         # Positional Factors
         positional = self.evaluate_positional_factors(game, game.turn, in_endgame)
-        score += positional * (0.8 if not in_endgame else 1.5)
+        score += positional * (1.3 if not in_endgame else 1.5)
 
         # Endgame Factors
         endgame = self.evaluate_endgame(game, game.turn, in_endgame)
@@ -425,11 +353,11 @@ class StrategicChessAgent:
 
         # Bottleneck Creation
         bottleneck = self.evaluate_bottleneck(game, game.turn)
-        score += bottleneck * (2.0 if not in_endgame else 3.0)
+        score += bottleneck * (2.5 if not in_endgame else 3.0)
 
         # Aggressive Defense
         aggressive_defense = self.evaluate_aggressive_defense(game, game.turn, in_endgame)
-        score += aggressive_defense * (1.5 if in_endgame else 1.0)
+        score += aggressive_defense * (1.5 if in_endgame else 1.3)
 
         # Long-term Strategic Planning
         strategic_planning = self.evaluate_strategic_planning(game, game.turn)
@@ -1626,57 +1554,98 @@ class StrategicChessAgent:
         endgame_score += self.evaluate_pawn_structure(game, turn, in_endgame=True)
         return endgame_score
 
-    def evaluate_game_state(self, game, maximizing_player):
+    def evaluate_move(self, game, move):
         """
-        Evaluate the game state from the perspective of the agent.
-        
-        Args:
-            game (Game): Current game state
-            maximizing_player (bool): True if evaluating for maximizing player, else False
-        
-        Returns:
-            float: Evaluation score
+        Ultra-Aggressive Move Evaluation
+        Prioritizes total tactical dominance and immediate threat generation
         """
-        in_endgame = self.is_endgame(game, game.turn)
         score = 0
-
-        # Material evaluation
-        material = self.calculate_material(game, game.turn)
-        for piece, value in self.PIECE_VALUES.items():
-            score += game.board.pieces.count(piece) * value
-
-        # King Safety
-        king_safety = self.evaluate_king_safety(game, game.turn)
-        score += king_safety
-
-        # Pawn Structure
-        pawn_structure = self.evaluate_pawn_structure(game, game.turn, in_endgame)
-        score += pawn_structure * (0.8 if not in_endgame else 1.2)
-
-        # Positional Factors
-        positional = self.evaluate_positional_factors(game, game.turn, in_endgame)
-        score += positional * (0.8 if not in_endgame else 1.5)
-
-        # Endgame Factors
-        endgame = self.evaluate_endgame(game, game.turn, in_endgame)
-        score += endgame
-
-        # Bottleneck Creation
-        bottleneck = self.evaluate_bottleneck(game, game.turn)
-        score += bottleneck * (2.0 if not in_endgame else 3.0)
-
-        # Aggressive Defense
-        aggressive_defense = self.evaluate_aggressive_defense(game, game.turn, in_endgame)
-        score += aggressive_defense * (1.5 if in_endgame else 1.0)
-
-        # Long-term Strategic Planning
-        strategic_planning = self.evaluate_strategic_planning(game, game.turn)
-        score += strategic_planning * 2.0  # Significant weight for long-term planning
-
+        try:
+            test_game = Game(game.get_fen())
+            test_game.apply_move(move)
+    
+            # ABSOLUTE PRIORITY: CHECKMATE
+            if test_game.status == Game.CHECKMATE:
+                return 1000000  # Overwhelming checkmate bonus
+    
+            # Game Stage Detection
+            in_endgame = self.is_endgame(test_game, game.turn)
+    
+            # 1. HYPER-AGGRESSIVE PIECE ELIMINATION
+            moving_piece = game.board.get_piece(Game.xy2i(move[:2]))
+            captured_piece = game.board.get_piece(Game.xy2i(move[2:4]))
+            
+            # ELIMINATION SCORING WITH EXTREME PREJUDICE
+            if captured_piece != ' ':
+                elimination_bonus = 50000 + (
+                    100000 if captured_piece.lower() == 'q'  # Queen elimination is CRITICAL
+                    else 75000 if captured_piece.lower() == 'r'  # Rook elimination severely punishes opponent
+                    else 50000 if captured_piece.lower() in ['b', 'n']  # Medium pieces heavily penalized
+                    else 25000  # Even minor pieces matter
+                )
+                score += elimination_bonus
+    
+            # 2. TACTICAL PIECE MOVEMENT SCORING
+            piece_movement_aggression = {
+                'q': 75000,   # QUEEN MOVEMENT IS SUPREME TACTICAL WEAPON
+                'r': 50000,   # ROOKS ARE OFFENSIVE POWERHOUSES
+                'n': 40000,   # KNIGHTS - PRECISION STRIKE CAPABILITY
+                'b': 35000,   # BISHOPS - DIAGONAL DOMINATION
+                'p': 25000    # PAWNS - PROMOTION THREAT ESCALATION
+            }.get(moving_piece.lower(), 10000)
+    
+            # ENDGAME AMPLIFICATION OF AGGRESSION
+            piece_movement_aggression *= (2.0 if in_endgame else 1.5)
+            score += piece_movement_aggression
+    
+            # 3. PAWN PROMOTION - EXISTENTIAL THREAT
+            if move[1] in ['7', '2'] and move[3] in ['8', '1']:
+                score += 250000  # MASSIVE BONUS FOR PROMOTION POTENTIAL
+    
+            # 4. THREAT GENERATION - MAXIMUM PRESSURE
+            threats_multiplier = 5.0 if not in_endgame else 7.0
+            threats_score = self.evaluate_threats(test_game, game.turn)
+            score += threats_score * 75000 * threats_multiplier
+    
+            # 5. STRATEGIC SQUARE CONTROL - TOTAL DOMINATION
+            key_square_control = self.evaluate_control_of_key_squares(test_game, game.turn)
+            score += key_square_control * 60000
+    
+            # 6. CHECKMATE COORDINATION - HUNT AND DESTROY
+            checkmate_potential = self.evaluate_checkmate_coordination(test_game, game.turn)
+            score += checkmate_potential * 100000
+    
+            # 7. KING HUNTING - RELENTLESS OFFENSIVE
+            king_hunting_score = self.evaluate_king_safety(test_game, game.turn)
+            score += king_hunting_score * 65000
+    
+            # 8. DEEP TACTICAL CALCULATION
+            minimax_depth_score = self.minimax(
+                test_game, 
+                self.choose_search_depth(game), 
+                -math.inf, 
+                math.inf, 
+                False
+            )
+            score += minimax_depth_score * 40000
+    
+            # 9. POSITIONAL DESTRUCTION BONUS
+            positional_destruction = self.evaluate_positional_factors(test_game, game.turn, in_endgame)
+            score += positional_destruction * 55000
+    
+            # 10. STRATEGIC UNPREDICTABILITY - CHAOS FACTOR
+            score += random.random() * 5000
+    
+            # FINAL AMPLIFICATION OF AGGRESSION
+            score *= (1.5 if not in_endgame else 2.0)
+    
+        except Exception as e:
+            # MINIMAL FALLBACK - STILL AGGRESSIVE
+            score = 10000
+    
         return score
 
-
-    def select_strategic_move(self, board_fen, look_ahead_depth=16):
+    def select_strategic_move_white_only(self, board_fen, look_ahead_depth=6):
         """
         Advanced strategic move selection with multi-tier evaluation.
         
@@ -1693,14 +1662,14 @@ class StrategicChessAgent:
         # 2. Create game instance
         game = Game(board_fen)
         moves = list(game.get_moves())
-        depth = 12
+        
         if not moves:
             return 'e2e4'  # Fallback move
         
         # 3. Advanced Probabilistic Move Selection
         try:
             # Attempt advanced move prediction
-            predicted_moves = self.predict_opponent_moves(game,look_ahead_depth=depth)
+            predicted_moves = self.predict_opponent_moves(game,look_ahead_depth=look_ahead_depth)
             
             if predicted_moves:
                 # Evaluate moves considering opponent prediction
@@ -1719,7 +1688,10 @@ class StrategicChessAgent:
                     key=lambda x: (x[0], x[2], x[3]), 
                     reverse=True
                 )
-                
+ 
+                # Increment the move counter
+                self.increment_move_count()
+
                 return move_evaluations[0][1]
         
         except Exception as e:
@@ -1734,7 +1706,80 @@ class StrategicChessAgent:
         
         # Sort and return top move
         evaluated_moves.sort(reverse=True)
+        # Increment the move counter
+        self.increment_move_count()
         return evaluated_moves[0][1]
+
+    def select_strategic_move(self, board_fen, look_ahead_depth=6):
+        """
+        Advanced strategic move selection with multi-tier evaluation.
+        Adapted to use board mirroring when playing as black.
+
+        Args:
+            board_fen (str): Current board state in FEN notation
+            look_ahead_depth (int): Depth for lookahead in move evaluation
+
+        Returns:
+            str: Selected strategic move
+        """
+        # Determine if the agent is playing black
+        is_black = ' b ' in board_fen
+
+        # Step 1: Handle mirroring for black
+        if is_black:
+            board_fen = self.mirror_board_state(board_fen)
+
+        # Step 2: Opening Book Priority
+        if board_fen in self.opening_moves:
+            selected_move = random.choice(self.opening_moves[board_fen])
+        else:
+            # Step 3: Create game instance
+            game = Game(board_fen)
+            moves = list(game.get_moves())
+            
+            if not moves:
+                selected_move = 'e2e4'  # Fallback move
+            else:
+                # Step 4: Advanced Probabilistic Move Selection
+                try:
+                    # Attempt advanced move prediction
+                    predicted_moves = self.predict_opponent_moves(game, look_ahead_depth=look_ahead_depth)
+                    if predicted_moves:
+                        # Evaluate moves considering opponent prediction
+                        move_evaluations = [
+                            (
+                                self.evaluate_move(game, move['initial_move']),
+                                move['initial_move'],
+                                move['probability'],
+                                move['strategic_score']
+                            )
+                            for move in predicted_moves[:5]  # Top 5 predicted moves
+                        ]
+                        # Multi-factor sorting
+                        move_evaluations.sort(
+                            key=lambda x: (x[0], x[2], x[3]),
+                            reverse=True
+                        )
+                        self.increment_move_count()
+                        selected_move = move_evaluations[0][1]
+                    else:
+                        raise Exception("No predicted moves available.")
+                except Exception as e:
+                    # Step 5: Fallback to traditional move evaluation
+                    evaluated_moves = [
+                        (self.evaluate_move(game, move), move)
+                        for move in moves[:]
+                    ]
+                    # Sort and return top move
+                    evaluated_moves.sort(reverse=True)
+                    self.increment_move_count()
+                    selected_move = evaluated_moves[0][1]
+
+        # Step 6: Mirror the move back to the original orientation if playing black
+        if is_black:
+            selected_move = self.mirror_move(selected_move)
+
+        return selected_move
 
 
     def evaluate_piece_coordination(self, game, turn):
@@ -1782,37 +1827,72 @@ class StrategicChessAgent:
 
     def evaluate_checkmate_coordination(self, game, turn):
         """
-        Evaluate scenarios where pieces coordinate to checkmate.
+        Comprehensively evaluate scenarios where pieces coordinate to create checkmate threats.
+        
+        Args:
+            game: The current chess game state
+            turn: The current player's turn ('w' or 'b')
+        
+        Returns:
+            int: A score representing the coordination and threat level around the opponent's king
         """
         score = 0
-        opponent_king = game.find_king('b' if turn == 'w' else 'w')
+        opponent_color = 'b' if turn == 'w' else 'w'
+        opponent_king = game.find_king(opponent_color)
+        
         if not opponent_king:
             return score  # No king found, skip evaluation
         
-        # Count attacking pieces near the opponent's king
+        # Attacking piece coordination
         attacks_on_king = 0
-        for piece_type in ['N', 'B', 'R', 'Q', 'K'] if turn == 'w' else ['n', 'b', 'r', 'q', 'k']:
+        attacking_piece_types = ['N', 'B', 'R', 'Q', 'K'] if turn == 'w' else ['n', 'b', 'r', 'q', 'k']
+        
+        for piece_type in attacking_piece_types:
             for pos in game.board.positions(piece_type):
                 if opponent_king in game.get_piece_attacks(game.board.get_piece(pos), pos):
                     attacks_on_king += 1
         
-        # Assign high score for multiple attackers
+        # Comprehensive king area pressure evaluation
+        king_attacks = 0
+        key_supporting_pieces = 0
+        key_squares_near_king = self.get_surrounding_squares(game, opponent_king)
+        
+        for square in key_squares_near_king:
+            # Check for attacks on key squares near the king
+            if self.is_attacked_by_ally(game, square, turn):
+                king_attacks += 1
+            
+            # Check for defensive support near the king
+            if self.is_defended(game, square, turn):
+                key_supporting_pieces += 1
+        
+        # Restricted king mobility calculation
+        restricted_squares = len(key_squares_near_king) - len(
+            [sq for sq in key_squares_near_king if game.board.get_piece(sq) == ' ']
+        )
+        
+        # Scoring components
+        # Multiple attackers coordination bonus
         if attacks_on_king >= 2:
             score += attacks_on_king * 300  # Reward compound threats
-
         
-        # Evaluate restricted king mobility
-        restricted_squares = len(self.get_surrounding_squares(game, opponent_king)) - len(
-            [sq for sq in self.get_surrounding_squares(game, opponent_king) if game.board.get_piece(sq) == ' ']
-        )
+        # Pressure around the king
+        score += king_attacks * 200  # Reward for direct attacks on squares near the king
+        score += key_supporting_pieces * 100  # Reward for support near the king
+        
+        # King mobility restriction
         score += restricted_squares * 75  # Bonus for limiting king movement
-
+        
+        # Check threat bonus
+        if game.is_check(opponent_color):
+            score += 500  # High reward for checks leading to mate
+        
         return score
 
 
 # => <= #
 
-    def predict_opponent_moves(self, game, look_ahead_depth=32):
+    def predict_opponent_moves(self, game, look_ahead_depth=6):
         """
         Predict and evaluate potential opponent moves with probabilistic weighting.
         
@@ -2471,35 +2551,7 @@ class StrategicChessAgent:
 
         return score
 
-    def evaluate_checkmate_coordination(self, game, turn):
-        """
-        Evaluate scenarios where pieces coordinate to checkmate.
-        """
-        score = 0
-        opponent_king = game.find_king('b' if turn == 'w' else 'w')
-        if not opponent_king:
-            return score  # No king found, skip evaluation
-        
-        king_attacks = 0
-        key_supporting_pieces = 0
-        key_squares_near_king = self.get_surrounding_squares(game, opponent_king)
 
-        # Evaluate pressure around the opponent's king
-        for square in key_squares_near_king:
-            if self.is_attacked_by_ally(game, square, turn):
-                king_attacks += 1
-            if self.is_defended(game, square, turn):
-                key_supporting_pieces += 1
-
-        # Collaborative checkmate bonus
-        score += king_attacks * 200  # Reward for direct attacks on squares near the king
-        score += key_supporting_pieces * 100  # Reward for support near the king
-
-        # Extra reward for checkmate threats
-        if game.is_check('b' if turn == 'w' else 'w'):
-            score += 500  # High reward for checks leading to mate
-
-        return score
 
     def evaluate_proactivity(self, game, move, turn):
         """
@@ -2729,13 +2781,94 @@ class StrategicChessAgent:
         """
         game_stage = self.determine_game_stage(game)
         if game_stage == 'opening':
-            return 16   # Faster decision-making
+            return 4   # Faster decision-making
         elif game_stage == 'midgame':
-            return 24  # Balanced depth
+            return 6  # Balanced depth
         elif game_stage == 'endgame':
-            return 32  # More thorough analysis
+            return 8  # More thorough analysis
         else:
             return self.max_search_depth
+
+    def evaluate_checkmate_potential(self, game, turn):
+        """
+        Evaluate the potential for checkmate.
+        
+        Args:
+            game (Game): Current game state
+            turn (str): Current player's turn ('w' or 'b')
+        
+        Returns:
+            float: Checkmate potential score
+        """
+        opponent_king = game.find_king('b' if turn == 'w' else 'w')
+        if not opponent_king:
+            return 0  # No opponent king found
+
+        # Evaluate restrictions on the opponent king
+        restricted_squares = len(self.get_surrounding_squares(game, opponent_king)) - len(
+            [sq for sq in self.get_surrounding_squares(game, opponent_king) if game.board.get_piece(sq) == ' ']
+        )
+        return restricted_squares * 75  # Reward for limiting opponent king mobility
+
+    def get_surrounding_squares(self, game, pos):
+        """
+        Get squares surrounding a given position.
+        
+        Args:
+            game (Game): Current game state
+            pos (int): Position to find surrounding squares
+        
+        Returns:
+            list: Positions surrounding the given square
+        """
+        surrounding = []
+        x, y = Game.i2xy(pos)
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                if dx == 0 and dy == 0:
+                    continue
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < 8 and 0 <= ny < 8:
+                    surrounding.append(Game.xy2i(f"{chr(nx + ord('a'))}{ny + 1}"))
+        return surrounding
+
+    def mirror_board_state(self, board_fen):
+        """
+        Mirrors the board FEN string horizontally and switches turn.
+        """
+        parts = board_fen.split()
+        board, turn, castling, *rest = parts
+        rows = board.split('/')
+        mirrored_rows = [''.join(reversed(row)) for row in rows]
+        mirrored_board = '/'.join(mirrored_rows).translate(str.maketrans('PNBRQKpnbrqk', 'pnbrqkPNBRQK'))
+        mirrored_turn = 'b' if turn == 'w' else 'w'
+        return ' '.join([mirrored_board, mirrored_turn, castling] + rest)
+
+    def mirror_move(self, move):
+        """
+        Mirrors a move string to adapt to the flipped board.
+        
+        Args:
+            move (str): Move string in the format 'e2e4' or 'e7e8q' (with promotion).
+
+        Returns:
+            str: Mirrored move string.
+        """
+        print("move is like ---: ", move)
+        if len(move) not in [4, 5]:
+            raise ValueError(f"Invalid move format: {move}")
+
+        # Mirror the start and end positions
+        start_col, start_row, end_col, end_row = move[:4]
+        mirrored_start_col = chr(ord('h') - (ord(start_col) - ord('a')))
+        mirrored_end_col = chr(ord('h') - (ord(end_col) - ord('a')))
+        
+        # Handle promotion if it exists
+        if len(move) == 5:
+            promotion = move[4]
+            return f"{mirrored_start_col}{start_row}{mirrored_end_col}{end_row}{promotion}"
+        
+        return f"{mirrored_start_col}{start_row}{mirrored_end_col}{end_row}"
 
 
 def chess_bot(obs):
