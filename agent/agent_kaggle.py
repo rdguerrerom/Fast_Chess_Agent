@@ -195,6 +195,8 @@ class StrategicChessAgent:
         
         Returns:
             float: Move evaluation score with increased aggression and tactical focus
+
+        TODO: Port this to the new function
         """
         score = 0
 
@@ -342,148 +344,136 @@ class StrategicChessAgent:
         offensive capabilities, and strategic long-term winning potential.
         """
         score = 0
-        turn = self.get_game_turn(game)  # 'w' or 'b' - use this as perspective
+        turn = self.get_game_turn(game)
         try:
             test_game = Game(game.get_fen())
             test_game.apply_move(move)
 
             in_endgame = self.is_endgame(test_game, turn)
 
-            # Collaborative checkmate evaluation
-            score += self.evaluate_checkmate_coordination(test_game, turn)*5.0
+            # Boost checkmate-related factors even more
+            checkmate_coord = self.evaluate_checkmate_coordination(test_game, turn)
+            score += checkmate_coord * 10.0
 
-            # Identify the moving piece and its new position
             moving_piece = game.board.get_piece(Game.xy2i(move[:2]))
             new_pos = Game.xy2i(move[2:4])
 
-            # If queen moves, evaluate queen potential
+            # Increase value for queen, rook, knight, bishop potential again
             if moving_piece.lower() == 'q':
-                score += self.evaluate_queen_potential(test_game, new_pos, turn)
-
-            # Evaluate potential based on piece type
-            if moving_piece.lower() == 'r':
-                score += self.evaluate_rook_potential(test_game, new_pos, turn)
-            elif moving_piece.lower() == 'n':
-                score += self.evaluate_knight_potential(test_game, new_pos, turn)
-            elif moving_piece.lower() == 'b':
-                score += self.evaluate_bishop_potential(test_game, new_pos, turn)
-
-            # Key square coordination
-            key_square_score = self.evaluate_piece_on_key_squares(test_game, turn)
-            score += key_square_score * (2.0 if in_endgame else 1.5)
-
-            # Immediate promotion
-            if move[1] in ['7', '2'] and move[3] in ['8', '1']:
-                score += 2000
-
-            score += self.evaluate_piece_coordination(test_game, turn) * 3.0
-            score += self.evaluate_control_of_key_squares(test_game, turn) * 5.5
-            score += self.evaluate_checkmate_coordination(test_game, turn) * 4.0
-
-            # Additional endgame piece potential
-            if in_endgame:
+                score += self.evaluate_queen_potential(test_game, new_pos, turn) * 2.0
+            elif moving_piece.lower() == 'r':
                 score += self.evaluate_rook_potential(test_game, new_pos, turn) * 2.0
-                score += self.evaluate_knight_potential(test_game, new_pos, turn) * 1.5
-                score += self.evaluate_bishop_potential(test_game, new_pos, turn) * 1.5
-            else:
-                score += self.evaluate_rook_potential(test_game, new_pos, turn) * 1.5
+            elif moving_piece.lower() == 'n':
                 score += self.evaluate_knight_potential(test_game, new_pos, turn) * 2.0
+            elif moving_piece.lower() == 'b':
                 score += self.evaluate_bishop_potential(test_game, new_pos, turn) * 2.0
 
-            # If pawn moves, evaluate coordinated advancement
-            if moving_piece.lower() == 'p':
-                pawn_advancement_score = self.evaluate_coordinated_pawn_advancement(test_game, turn)
+            # 3. Evaluate pawn advancement and coordination
+            moving_piece = game.board.get_piece(Game.xy2i(move[:2]))
+            if moving_piece.lower() == 'p':  # If the move involves a pawn
+                pawn_advancement_score = self.evaluate_coordinated_pawn_advancement(test_game, game.turn)
                 score += pawn_advancement_score * (2.0 if in_endgame else 1.5)
 
-            # Aggressive capture evaluation
-            captured_piece = game.board.get_piece(Game.xy2i(move[2:4]))
-            if captured_piece != ' ':
-                # Use perspective-based value
-                capture_bonus = 1500 + self.get_piece_value(captured_piece, turn)
-                score += capture_bonus
+            # Key squares, coordination, etc.
+            key_square_score = self.evaluate_piece_on_key_squares(test_game, turn)
+            score += key_square_score * (3.0 if in_endgame else 2.5)
 
-            # Threats evaluation
+            # Immediate promotion extremely rewarded
+            if move[1] in ['7','2'] and move[3] in ['8','1']:
+                score += 3500
+
+            # Increase piece coordination importance
+            piece_coordination_score = self.evaluate_piece_coordination(test_game, turn)
+            score += piece_coordination_score * 5.0
+
+            control_key_squares_score = self.evaluate_control_of_key_squares(test_game, turn)
+            score += control_key_squares_score * 8.0
+
+            # Incorporate multi-piece coordination, even if not used before
+            multi_piece_coord = self.evaluate_multi_piece_coordination(test_game, turn)
+            score += multi_piece_coord * 4.0
+
+            # Threats, mobility, king safety
             threats_score = self.evaluate_threats(test_game, turn)
-            score += threats_score * (3.0 if not in_endgame else 4.0)
+            score += threats_score * (5.0 if in_endgame else 4.0)
 
-            # Mobility
             mobility_score = self.evaluate_mobility(test_game, turn)
-            score += mobility_score * (2.0 if not in_endgame else 2.5)
+            score += mobility_score * (3.0 if in_endgame else 2.5)
 
-            # King Safety
             king_safety_score = self.evaluate_king_safety(test_game, turn)
-            score += king_safety_score * 2.0
-            # Balanced king safety again
-            king_safety_score = self.evaluate_king_safety(test_game, turn)
-            score += king_safety_score * 1.2
+            score += king_safety_score * 3.0
 
-            # Pawn structure
             pawn_structure_score = self.evaluate_pawn_structure(test_game, turn, in_endgame)
-            score += pawn_structure_score * (1.0 if not in_endgame else 1.5)
+            score += pawn_structure_score * (1.5 if in_endgame else 1.2)
 
-            # Positional strategy
             positional_score = self.evaluate_positional_factors(test_game, turn, in_endgame)
-            score += positional_score * (1.2 if not in_endgame else 2.0)
+            score += positional_score * (2.5 if in_endgame else 1.8)
 
-            # Endgame factors
             endgame_score = self.evaluate_endgame(test_game, turn, in_endgame)
-            score += endgame_score * 1.5
+            score += endgame_score * (2.5 if in_endgame else 1.0)
 
-            # Minimax deep search
+            # Add rook king coordination, king activity, king-pawn coordination at all times, especially in endgame
+            king_activity_score = self.evaluate_king_activity(test_game, turn)
+            score += king_activity_score * (5.0 if in_endgame else 2.0)
+
+            rook_king_coord_score = self.evaluate_rook_king_coordination(test_game, turn)
+            score += rook_king_coord_score * (4.0 if in_endgame else 1.5)
+
+            king_pawn_coord_score = self.evaluate_king_pawn_coordination(test_game, turn)
+            score += king_pawn_coord_score * (4.0 if in_endgame else 1.5)
+
+            # If in endgame, also integrate previously unused endgame heuristics:
+            if in_endgame:
+                king_pawns_endgame_score = self.evaluate_king_and_pawns_endgame(test_game, turn)
+                score += king_pawns_endgame_score * 3.0
+
+                rook_endgame_score = self.evaluate_rook_endgame(test_game, turn)
+                score += rook_endgame_score * 2.5
+
+            # Add previously unused checkmate patterns and endgame checkmate potential strongly
+            checkmate_patterns_score = self.evaluate_checkmate_patterns(test_game, turn)
+            score += checkmate_patterns_score * (10.0 if in_endgame else 5.0)
+
+            endgame_checkmate_potential_score = self.evaluate_endgame_checkmate_potential(test_game, turn)
+            score += endgame_checkmate_potential_score * (10.0 if in_endgame else 5.5)
+
+            # Minimax remains
             minimax_score = self.minimax(test_game, self.choose_search_depth(test_game), -math.inf, math.inf, False)
             score += minimax_score * 3.0
 
-            # Bottleneck creation
-            bottleneck_score = self.evaluate_bottleneck(test_game, turn)* (20.0 if not in_endgame else 40.0)
-            score += bottleneck_score * (12.0 if not in_endgame else 24.0)
-
-            # Aggressive defense
+            # Aggressive Defense and Bottleneck still matter
             aggressive_defense_score = self.evaluate_aggressive_defense(test_game, turn, in_endgame)
-            score += aggressive_defense_score * (3.0 if in_endgame else 2.5)
+            score += aggressive_defense_score * (6.0 if in_endgame else 5.0)
 
-            # Long-term strategic planning
+            bottleneck_score = self.evaluate_bottleneck(test_game, turn)* (40.0 if in_endgame else 25.0)
+            score += bottleneck_score * (15.0 if in_endgame else 10.0)
+
             strategic_planning_score = self.evaluate_strategic_planning(test_game, turn)
-            score += strategic_planning_score * 5.0
+            score += strategic_planning_score * (6.0 if in_endgame else 3.0)
 
-            # Piece value consideration
+            # Piece value
             piece_value = self.get_piece_value(moving_piece, turn)
-            score += piece_value * 1.5
+            score += piece_value * 6.0
 
-            # Strategic unpredictability
-            score += random.random() * 50
+            # Reduce randomness further; we want stable mate-seeking behavior
+            score += random.random() * 5
 
             # Proactivity
-            score += self.evaluate_proactivity(game, move, turn)*1.2
+            proactivity_score = self.evaluate_proactivity(game, move, turn)
+            score += proactivity_score * 3.0
 
-            # Endgame adjustments
+            # Endgame checkmate acceleration
             if in_endgame:
-                score += self.calculate_checkmate_acceleration_bonus(test_game, turn) * 10.0
-                score += endgame_score * 3.0
-                score += threats_score * 4.0
-
-                # Tactical patterns evaluation (make sure `tactical_score` is defined)
+                score += self.calculate_checkmate_acceleration_bonus(test_game, turn) * 25.0
+                score += endgame_score * 4.0
+                score += threats_score * 7.0
                 tactical_score = self.evaluate_tactical_patterns(test_game, turn)
-                score += tactical_score * 5.0
+                score += tactical_score * 10.0
 
-                # Endgame-specific
-                score += self.evaluate_endgame_checkmate_potential(test_game, turn)
-                score += self.evaluate_king_pawn_coordination(test_game, turn)
-                
-                # Already calling acceleration bonus, endgame checkmate potential, etc.
-                # Add checkmate patterns evaluation:
-                checkmate_pattern_score = self.evaluate_checkmate_patterns(test_game, turn)
-                score += checkmate_pattern_score * 2.0  # Weight as desired
-
-                # If you also want to consider smothered mate specifically as a big bonus:
-                if self.is_smothered_mate_possible(test_game, test_game.board.get_king_position('b' if turn=='w' else 'w'), turn):
-                    score += 1000  # Big bonus for forced smothered mate pattern
-
-        except Exception as e:
-            # Fallback
+        except Exception:
             score = random.random() * 10
 
         return score
-
 
 
     def calculate_checkmate_acceleration_bonus(self, test_game, turn):
@@ -1804,49 +1794,78 @@ class StrategicChessAgent:
         Returns:
             float: Evaluation score
         """
-        turn = self.get_game_turn(game)  # Current turn perspective
+        turn = self.get_game_turn(game)
+        turn = self.get_game_turn(game)
         in_endgame = self.is_endgame(game, turn)
         score = 0
 
-        # Material evaluation: sum piece values from turn's perspective
+        # Material
         for piece in game.board.pieces:
             score += self.get_piece_value(piece, turn)
 
         # King Safety
         king_safety = self.evaluate_king_safety(game, turn)
-        score += king_safety
+        score += king_safety * 2.5
 
         # Pawn Structure
         pawn_structure = self.evaluate_pawn_structure(game, turn, in_endgame)
-        score += pawn_structure * (0.8 if not in_endgame else 1.2)
+        score += pawn_structure * (1.5 if in_endgame else 1.0)
 
         # Positional Factors
         positional = self.evaluate_positional_factors(game, turn, in_endgame)
-        score += positional * (0.8 if not in_endgame else 1.5)
+        score += positional * (2.0 if in_endgame else 1.5)
 
         # Endgame Factors
         endgame = self.evaluate_endgame(game, turn, in_endgame)
-        score += endgame
+        score += endgame * (3.0 if in_endgame else 1.0)
 
         # Bottleneck Creation
         bottleneck = self.evaluate_bottleneck(game, turn)
-        score += bottleneck * (2.0 if not in_endgame else 3.0)
+        score += bottleneck * (4.0 if in_endgame else 2.0)
 
         # Aggressive Defense
         aggressive_defense = self.evaluate_aggressive_defense(game, turn, in_endgame)
-        score += aggressive_defense * (1.5 if in_endgame else 1.0)
+        score += aggressive_defense * (2.0 if in_endgame else 1.5)
 
-        # Long-term Strategic Planning
+        # Strategic Planning
         strategic_planning = self.evaluate_strategic_planning(game, turn)
-        score += strategic_planning * 2.0
+        score += strategic_planning * (4.0 if in_endgame else 2.0)
 
-        # Add checkmate patterns evaluation to static evaluation:
-        score += self.evaluate_checkmate_coordination(game, turn) * 2.0
-        # Endgame checkmate potential:
+        # Integrate king proactivity and coordination even in static eval
+        king_activity_score = self.evaluate_king_activity(game, turn)
+        score += king_activity_score * (3.0 if in_endgame else 1.0)
+
+        rook_king_coord_score = self.evaluate_rook_king_coordination(game, turn)
+        score += rook_king_coord_score * (3.0 if in_endgame else 1.0)
+
+        king_pawn_coord_score = self.evaluate_king_pawn_coordination(game, turn)
+        score += king_pawn_coord_score * (3.0 if in_endgame else 1.0)
+
+        # Add multi-piece coordination to static eval
+        multi_piece_coord = self.evaluate_multi_piece_coordination(game, turn)
+        score += multi_piece_coord * (3.0 if in_endgame else 1.0)
+
+        # If in endgame, integrate these endgame-specific checks:
         if in_endgame:
-            score += self.evaluate_endgame_checkmate_potential(game, turn) * 1.5
-            # Checkmate patterns:
-            score += self.evaluate_checkmate_patterns(game, turn) * 1.5
+            king_pawns_endgame_score = self.evaluate_king_and_pawns_endgame(game, turn)
+            score += king_pawns_endgame_score * 3.0
+
+            rook_endgame_score = self.evaluate_rook_endgame(game, turn)
+            score += rook_endgame_score * 2.0
+
+        # Checkmate patterns & potential
+        checkmate_coordination = self.evaluate_checkmate_coordination(game, turn)
+        score += checkmate_coordination * (6.0 if in_endgame else 3.0)
+
+        checkmate_patterns_score = self.evaluate_checkmate_patterns(game, turn)
+        score += checkmate_patterns_score * (5.0 if in_endgame else 2.0)
+
+        endgame_checkmate_potential_score = self.evaluate_endgame_checkmate_potential(game, turn)
+        score += endgame_checkmate_potential_score * (6.0 if in_endgame else 1.5)
+
+        # Encourage quicker mate with acceleration bonus in endgame static eval
+        if in_endgame:
+            score += self.calculate_checkmate_acceleration_bonus(game, turn) * 15.0
 
         return score
 
@@ -1860,56 +1879,68 @@ class StrategicChessAgent:
         Returns:
             str: Selected strategic move
         """
+        """
+        Select a strategic move from the given board position.
+
+        Steps:
+        1. Check if position is in opening book. If so, pick a random opening move.
+        2. Otherwise, create a Game instance and get all legal moves.
+        3. If no legal moves, fallback to a symmetrical default based on turn.
+        4. Attempt advanced probabilistic opponent move prediction:
+           - Evaluate predicted moves and pick the best one.
+           - If no predictions available or an error occurs, fallback to traditional move evaluation.
+        5. Traditional evaluation:
+           - Evaluate all legal moves with evaluate_move, pick the highest scoring one.
+
+        This method now fully accounts for both White ('w') and Black ('b') perspectives.
+        """
+        # Create a Game instance to determine turn and moves
+        test_game = Game(board_fen)
+        turn = self.get_game_turn(test_game)  # 'w' or 'b'
+        
         # 1. Opening Book Priority
         if board_fen in self.opening_moves:
             return random.choice(self.opening_moves[board_fen])
 
-        # 2. Create game instance
-        game = Game(board_fen)
-        moves = list(game.get_moves())
+        moves = list(test_game.get_moves())
         depth = 12
         if not moves:
-            return 'e2e4'  # Fallback move
-        
-        # 3. Advanced Probabilistic Move Selection
+            # 2. No legal moves fallback:
+            # White fallback: 'e2e4'
+            # Black fallback: 'e7e5'
+            if turn == 'w':
+                return 'e2e4'
+            else:
+                return 'e7e5'
+
+        # 3. Attempt Advanced Probabilistic Move Selection
         try:
-            # Attempt advanced move prediction
-            predicted_moves = self.predict_opponent_moves(game,look_ahead_depth=depth)
-            
+            predicted_moves = self.predict_opponent_moves(test_game, look_ahead_depth=depth)
             if predicted_moves:
-                # Evaluate moves considering opponent prediction
+                # Evaluate top predicted moves. Perspective is handled inside evaluate_move.
                 move_evaluations = [
-                    (
-                        self.evaluate_move(game, move['initial_move']), 
-                        move['initial_move'],
-                        move['probability'],
-                        move['strategic_score']
-                    ) 
-                    for move in predicted_moves[:5]  # Top 5 predicted moves
+                    (self.evaluate_move(test_game, move_info['initial_move']), 
+                     move_info['initial_move'],
+                     move_info['probability'],
+                     move_info['strategic_score'])
+                    for move_info in predicted_moves[:5]
                 ]
-                
-                # Multi-factor sorting
-                move_evaluations.sort(
-                    key=lambda x: (x[0], x[2], x[3]), 
-                    reverse=True
-                )
-                
+                # Sort by score, probability, and strategic_score
+                move_evaluations.sort(key=lambda x: (x[0], x[2], x[3]), reverse=True)
                 return move_evaluations[0][1]
-        
-        except Exception as e:
-            # Fallback to original evaluation if advanced prediction fails
+        except Exception:
+            # If any error in prediction, fallback to traditional evaluation
             pass
-        
+
         # 4. Traditional Move Evaluation
         evaluated_moves = [
-            (self.evaluate_move(game, move), move) 
-            for move in moves[:]
+            (self.evaluate_move(test_game, move), move) 
+            for move in moves
         ]
-        
-        # Sort and return top move
-        evaluated_moves.sort(reverse=True)
-        return evaluated_moves[0][1]
+        evaluated_moves.sort(reverse=True, key=lambda x: x[0])
 
+        # Return the best move after thorough perspective-based evaluation
+        return evaluated_moves[0][1]
 
     def evaluate_piece_coordination(self, game, turn):
         """
@@ -2324,6 +2355,14 @@ class StrategicChessAgent:
         Returns:
             float: Score reflecting pawn advancement potential.
         """
+        """
+        Evaluate the advancement potential of a single pawn, rewarding:
+        - Closeness to promotion
+        - Being a passed pawn
+        - Being unobstructed by enemy pieces (not blocked)
+        
+        Consider perspective: White pawns advance upward (y increasing), Black pawns downward (y decreasing).
+        """
         piece = game.board.get_piece(pawn_pos)
         if piece == ' ':
             return 0
@@ -2332,21 +2371,32 @@ class StrategicChessAgent:
         x, y = Game.i2xy(pawn_pos)
 
         # Distance to promotion:
-        # For White, promotion rank is 7 (0-based index for rank 8), so distance = 7 - y
-        # For Black, promotion rank is 0 (rank 1), so distance = y
+        # For White: promotion rank is y=7 (8th rank in human terms)
+        # Distance to promotion = 7 - y
+        # For Black: promotion rank is y=0 (1st rank in human terms)
+        # Distance to promotion = y
         distance_to_promotion = (7 - y) if is_white else y
 
         score = 0
-        # Reward greater advancement (closer to promotion)
-        score += (7 - distance_to_promotion) * 50
+        # Reward greater advancement towards promotion
+        # Pawns closer to promotion rank get exponentially larger rewards
+        # Encourage aggressive push for promotion
+        score += (7 - distance_to_promotion) * 60
 
         # Check if passed pawn
         if self.is_passed_pawn(game, pawn_pos):
-            score += 200
+            # Passed pawns are extremely valuable especially as they get closer to promotion
+            score += 250
 
         # Check if the pawn is blocked
         if self.is_blocked_pawn(game, pawn_pos):
+            # Penalize blocked pawns as they cannot advance
             score -= 100
+
+        # Additional minor reward if the pawn is protected or supported by another pawn
+        # This encourages stable pawn structures advancing together
+        if self.is_defended(game, pawn_pos, 'w' if is_white else 'b'):
+            score += 40
 
         return score
 
@@ -2426,18 +2476,72 @@ class StrategicChessAgent:
         Returns:
             int: Total pawn advancement score.
         """
+        """
+        Evaluate all pawns for advancement and coordination.
+        
+        This includes:
+        - Summing up individual advancement potentials from evaluate_pawn_advancement.
+        - Encouraging pawn chains, connected pawns, and avoiding isolated or backward pawns.
+        - Considering synergy with the king in the endgame to push for promotion-based checkmates.
+        
+        Args:
+            game (Game): Current game state.
+            turn (str): 'w' or 'b', perspective of the current player.
+
+        Returns:
+            int: Total pawn advancement and coordination score.
+        """
         pawns = game.board.positions('P' if turn == 'w' else 'p')
         score = 0
+        in_endgame = self.is_endgame(game, turn)
 
+        # First, evaluate each pawn’s individual advancement potential
         for pawn in pawns:
-            # Reward individual pawn advancement
             score += self.evaluate_pawn_advancement(game, pawn)
 
-        # Evaluate group coordination
-        score += self.evaluate_pawn_coordination(game, pawns, turn)
+        # Evaluate coordination among pawns:
+        # Connected pawns, pawn chains, and supported pawns get bonuses
+        # Conversely, isolated and backward pawns are penalized (already accounted in their advancement scores)
+        # Here we provide additional synergy bonuses.
+
+        # Reward clusters of connected pawns
+        # Connected pawns often appear in "chains" diagonally supporting each other.
+        # We'll scan for connected pairs to give synergy bonuses.
+        # For White, pawns often support each other going upward, for Black downward.
+
+        # The following logic checks for connected pawns:
+        is_white = (turn == 'w')
+        directions = [(1, 1), (-1, 1)] if is_white else [(1, -1), (-1, -1)]
+        
+        # Convert pawns positions to a set for quick lookup
+        pawns_set = set(pawns)
+        connected_bonus = 0
+        for pawn in pawns:
+            x, y = Game.i2xy(pawn)
+            for dx, dy in directions:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < 8 and 0 <= ny < 8:
+                    neighbor = Game.xy2i(f"{chr(nx + ord('a'))}{ny + 1}")
+                    if neighbor in pawns_set:
+                        # Connected pawns reinforcing each other
+                        connected_bonus += 50
+
+        score += connected_bonus
+
+        # Additional factor: if in endgame, encourage king support of pawns
+        # This encourages pushing pawns with the king’s help to achieve promotion.
+        if in_endgame:
+            king_pos = game.find_king(turn)
+            if king_pos is not None:
+                # Reward pawns close to the king, as the king can help escort them
+                for pawn in pawns:
+                    distance = self.distance(king_pos, pawn)
+                    # Closer pawns to the king are easier to promote with king’s help
+                    # The smaller the distance, the greater the synergy bonus
+                    if distance <= 3:
+                        score += (4 - distance) * 30  # Encourage king-pawn synergy significantly
 
         return score
-
 
     def evaluate_key_square_control(self, game, piece_pos, turn):
         """
