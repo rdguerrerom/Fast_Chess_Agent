@@ -5,8 +5,126 @@ import math
 import copy
 from collections import Counter
 
-
 class StrategicChessAgent:
+    WEIGHTS = {
+        # evaluate_move
+       "checkmate_acceleration":1957,
+       "tactical_potential":1375,
+       "material_advantage":553,
+       "positional_advantage":1145,
+       "king_safety":335,
+       "pawn_structure":879,
+       "positional_factor":622,
+       "strategic_planning":10616,
+       "bottleneck":1072,
+       "aggressive_defense":251,
+       "king_activity":391,
+       "rook_king_coordination":1220,
+       "king_pawn_coordination":784,
+       "multi_piece_coordination":2050,
+       "checkmate_coordination":698,
+       "minimax":1296,
+        # calculate_checkmate_acceleration_bonus
+        "king_distance": 1000,
+        "material_diff": 500,
+        "is_check": 2000,
+        "can_force_checkmate": 5000,
+        # evaluate_strategic_planning
+        "pawn_chains": 50,
+        "piece_coordination": 40,
+        "key_control": 60,
+        # evaluate_pawn_chains
+        "connected_pawns": 20,
+        "piece": 20,
+        "piece_is_attacked_by_ally": 90,
+        "piece_is_defended": 50,
+        # evaluate_multiple_key_control
+        "6_or_more": 150,
+        "5_key_squares": 120,
+        "4_key_squares": 100,
+        "3_key_squares": 75,
+        "2_key_squares": 50,
+        "1_key_squares": 25,
+        # evaluate_tactical_patterns
+        "is_double_threat": 120,
+        "is_fork": 100,
+        "is_pin": 80,
+        "is_skewer": 80,
+        "is_discovered_attack": 90,
+        # evaluate_threats
+        "threatening_a_piece": 50,
+        "threatening_the_king": 150,
+        # evaluate_king_safety
+        "pawn_in_shield": 20,
+        "king_is_in_check": 300,
+        "open_square_around_king": 10,
+        "king_proximity_bonus": 200,
+        # evaluate_pawn_structure
+        "passed_pawn": 100,
+        "in_endgame": 50,
+        "doubled_pawn": 50,
+        "isolated_pawn": 50,
+        "backward_pawn": 50,
+        # evaluate_pawn_majority
+        "pawn_majority": 10,
+        "pawn_deficit": 10,
+        # evaluate_positional_factors
+        "center_squares": 100,
+        "open_file": 50,
+        "open_diagonal": 50,
+        "controlled_squares": 10,
+        "key_squares": 100,
+        "potential_zugzwang": 100,
+        # evaluate_bottleneck
+        "bottlenecked_square": 100,
+        "attack_potential": 50,
+        #evaluate_aggressive_defense
+        "vulnerable_piece": 100,
+        "piece_undefended": 100,
+        "blocking_move": 50,
+        "exposed_piece": 75,
+        # evaluate_pawn_promotion
+        "pawn_promotion": 250,
+        # evaluate_king_activity
+        "king_activity": 20,
+        # evaluate_rook_king_coordination
+        "rook_king_coordination": 50,
+        # evaluate_control_of_key_squares
+        "controlling_key_squares": 75,
+        # evaluate_king_and_pawns_endgame
+        "closenest_to_center": 50,
+        "advancing_pawns": 50,
+        #evaluate_rook_endgame
+        "on_open_file": 50,
+        "rook_closer_to_center": 20,
+        # evaluate_multi_piece_coordination
+        "mutual_support": 20,
+        "coordinated_attacks": 90,
+        "upported_squares": 50,
+        # evaluate_multi_piece_coordination
+        "attacking_pieces": 300,
+        "multiple_attackers": 200,
+        "limiting_king": 100,
+        "pawn_control_key": 100,
+        # evaluate_checkmate_patterns
+        "back_rank_mate": 800,
+        "smothered_mate": 800,
+        # evaluate_key_square_control
+        "key_square_control": 50,
+        "square_is_ally": 30,
+        "square_is_defended": 20,
+        # evaluate_endgame_checkmate_potential
+        "restricted_squares": 50,
+        "ladder_mate_possible": 500,
+        "rook_king_endgame": 400,
+        # evaluate_king_pawn_coordination
+        "pawn_proximity": 50,
+        # evaluate_checkmate_coordination
+        "king_attacks": 200,
+        "key_supporting_pieces": 100,
+        "is_in_check": 700,
+        # 
+    }
     # Piece value constants
     BASE_PIECE_VALUES = {
         "P": 100,
@@ -104,38 +222,19 @@ class StrategicChessAgent:
                 return 9999999
 
             # Weighted evaluation factors
-            weights = {
-                "checkmate_acceleration": 1900.0,  # Boosted for direct wins
-                "tactical_potential": 800.0,  # Stronger focus on tactics
-                "material_advantage": 110.0,  # Balanced but important
-                "positional_advantage": 95.0,  # Slightly increased
-                "king_safety": 40.0,  # Reduced to encourage risk-taking
-                "pawn_structure": 80.0,  # Encourage pawn play
-                "positional_factor": 100.0,  # Increased for strategic positioning
-                "bottleneck": 50.0,  # Penalize restricted positions
-                "aggressive_defense": 200.0,  # Counterattack emphasis
-                "strategic_planning": 310.0,  # Better long-term planning
-                "king_activity": 900.0,  # Active king in endgame
-                "rook_king_coordination": 700.0,  # Promote teamwork
-                "king_pawn_coordination": 800.0,  # Endgame synergy
-                "multi_piece_coordination": 1900.0,  # Improved coordination
-                "checkmate_coordination": 1200.0,  # Prioritize checkmate setups
-                "minimax": 0.0,  # Dynamically adjusted (e.g., 50.0 in endgame)
-            }
-
+            weights = self.WEIGHTS
             # Stage-specific weight adjustments
             if game_stage == "opening":
                 weights["piece_coordination"] *= 1.3
                 weights["material_advantage"] *= 1.2
-                weights["minimax"] = 15.0
+                weights["minimax"] *= 1.0
             elif game_stage == "midgame":
                 weights["tactical_potential"] *= 1.8
                 weights["king_safety"] *= 1.1
-                weights["minimax"] = 25.0
+                weights["minimax"] *= 5.0
             else:  # endgame
                 weights["checkmate_acceleration"] *= 2.5
-                weights["minimax"] = 50.0
-
+                weights["minimax"] *= 10.0
             # Accumulate weighted scores
             score += self.calculate_checkmate_acceleration_bonus(test_game, turn) * weights["checkmate_acceleration"]
             score += self.evaluate_piece_coordination(test_game, turn) * weights["piece_coordination"]
@@ -237,8 +336,9 @@ class StrategicChessAgent:
 
         king_distance = abs(own_king_pos[0] - opp_king_pos[0]) + abs(own_king_pos[1] - opp_king_pos[1])
         material_diff = self.calculate_material_difference(test_game, turn)
-
-        checkmate_acceleration_score = (8 - king_distance) * 1000 + (material_diff * 500) + (2000 if self.is_check(test_game, turn) else 0) + (5000 if self.can_force_checkmate(test_game, turn) else 0)
+        
+        weights = self.WEIGHTS
+        checkmate_acceleration_score = (8 - king_distance) * weights["king_distance"] + (material_diff * weights["material_diff"]) + (weights["is_check"] if self.is_check(test_game, turn) else 0) + (weights["can_force_checkmate"] if self.can_force_checkmate(test_game, turn) else 0)
 
         return checkmate_acceleration_score
 
@@ -272,14 +372,15 @@ class StrategicChessAgent:
     def evaluate_strategic_planning(self, game, turn):
         strategic_score = 0
 
+        weights = self.WEIGHTS
         pawn_chains = self.evaluate_pawn_chains(game, turn)
-        strategic_score += pawn_chains * 50  # Reward for strong pawn chains
+        strategic_score += pawn_chains * weights["pawn_chains"]  # Reward for strong pawn chains
 
         piece_coordination = self.evaluate_piece_coordination(game, turn)
-        strategic_score += piece_coordination * 40  # Reward for good coordination
+        strategic_score += piece_coordination * weights["piece_coordination"]  # Reward for good coordination
 
         key_control = self.evaluate_multiple_key_control(game, turn)
-        strategic_score += key_control * 60  # Significant reward for controlling multiple key squares
+        strategic_score += key_control * weights["key_control"]  # Significant reward for controlling multiple key squares
 
         return strategic_score
 
@@ -291,14 +392,14 @@ class StrategicChessAgent:
             key=lambda pos: Game.i2xy(pos)[1],
             reverse=(turn == "w"),
         )
-
+        weights = self.WEIGHTS
         for pawn in pawn_positions:
             x, y = Game.i2xy(pawn)
             for af in adjacent_files:
                 if 0 <= af < 8:
                     behind_pos = Game.xy2i(f"{chr(af + ord('a'))}{y - 1 + (1 if turn == 'w' else -1)}")
                     if behind_pos in pawns:
-                        score += 20  # Reward for connected pawns
+                        score += weights["connected_pawns"]  # Reward for connected pawns
         return score
 
     def evaluate_piece_coordination(self, game, turn):
@@ -314,30 +415,31 @@ class StrategicChessAgent:
             for target in attacks:
                 target_piece = game.board.get_piece(target)
                 if target_piece != " " and ((piece_type.isupper() and target_piece.islower()) or (piece_type.islower() and target_piece.isupper())):
-                    score += 20
+                    score += weights["piece"]
 
                     if self.is_attacked_by_ally(game, target, turn):
-                        score += 90
+                        score += weights["piece_is_attacked_by_ally"]
 
                     if self.is_defended(game, target, turn):
-                        score += 50
+                        score += weights["piece_is_defended"]
 
         return score
 
     def evaluate_multiple_key_control(self, game, turn):
         controlled_keys = self.get_key_squares(game, turn)
+        weights = self.WEIGHTS
         if len(controlled_keys) >= 6:
-            return 150  # Major reward for controlling multiple key squares
+            return weights["6_or_more"]  # Major reward for controlling multiple key squares
         elif len(controlled_keys) == 5:
-            return 120
+            return weights["5_key_squares"]
         elif len(controlled_keys) == 4:
-            return 100
+            return weights["4_key_squares"]
         elif len(controlled_keys) == 3:
-            return 75
+            return weights["3_key_squares"]
         elif len(controlled_keys) == 2:
-            return 50
+            return weights["2_key_squares"]
         elif len(controlled_keys) == 1:
-            return 25
+            return weights["1_key_squares"]
         return 0
 
     def is_endgame(self, game, turn):
@@ -358,7 +460,7 @@ class StrategicChessAgent:
     def evaluate_tactical_patterns(self, game, turn):
         tactical_score = 0
         opponent = "b" if turn == "w" else "w"
-
+        weights = self.WEIGHTS
         # Iterate through all pieces to find tactical motifs
         for piece_type in ["N", "B", "R", "Q"] if turn == "w" else ["n", "b", "r", "q"]:
             for pos in game.board.positions(piece_type):
@@ -367,15 +469,15 @@ class StrategicChessAgent:
                     target_piece = game.board.get_piece(target)
                     if target_piece != " " and (target_piece.islower() if turn == "w" else target_piece.isupper()):
                         if self.is_double_threat(game, pos, target, turn):
-                            tactical_score += 120
+                            tactical_score += weights["is_double_threat"]
                         if self.is_fork(game, pos, target, turn):
-                            tactical_score += 100
+                            tactical_score += weights["is_fork"]
                         if self.is_pin(game, pos, target, turn):
-                            tactical_score += 80
+                            tactical_score += weights["is_pin"]
                         if self.is_skewer(game, pos, target, turn):
-                            tactical_score += 80
+                            tactical_score += weights["is_skewer"]
                         if self.is_discovered_attack(game, pos, target, turn):
-                            tactical_score += 90
+                            tactical_score += weights["is_discovered_attack"]
         return tactical_score
 
     def is_fork(self, game, attacker_pos, target_pos, turn):
@@ -484,32 +586,34 @@ class StrategicChessAgent:
     def evaluate_threats(self, game, turn):
         threats_score = 0
         opponent = "b" if turn == "w" else "w"
+        weights = self.WEIGHTS
         for piece_type in ["N", "B", "R", "Q", "P"] if turn == "w" else ["n", "b", "r", "q", "p"]:
             for pos in game.board.positions(piece_type):
                 threats = game.get_piece_attacks(piece_type, pos)
                 for target in threats:
                     target_piece = game.board.get_piece(target)
                     if target_piece != " " and (target_piece.islower() if turn == "w" else target_piece.isupper()):
-                        threats_score += 50  # Bonus for threatening a piece
+                        threats_score += weights["threatening_a_piece"]  # Bonus for threatening a piece
                     if game.is_attacked(target, opponent):
-                        threats_score += 100  # Bonus for threatening the king
+                        threats_score += weights["threatening_the_king"]  # Bonus for threatening the king
         return threats_score
 
     def evaluate_king_safety(self, game, turn):
         safety_score = 0
         king_pos = game.find_king(turn)
+        weights = self.WEIGHTS
         if not king_pos:
             return safety_score  # Should not happen, but safe guard
 
         shield_pawns = self.get_pawn_shield(game, king_pos, turn)
-        safety_score += len(shield_pawns) * 20  # Reward for each pawn in shield
+        safety_score += len(shield_pawns) * weights["pawn_in_shield"]  # Reward for each pawn in shield
 
         if game.is_attacked(king_pos, "b" if turn == "w" else "w"):
-            safety_score -= 300  # High penalty if king is in check
+            safety_score -= weights["king_is_in_check"]  # High penalty if king is in check
 
         surrounding_squares = self.get_surrounding_squares(game, king_pos)
         open_squares = [sq for sq in surrounding_squares if game.board.get_piece(sq) == " "]
-        safety_score -= len(open_squares) * 10  # Penalize for each open square around king
+        safety_score -= len(open_squares) * weights["open_square_around_king"]  # Penalize for each open square around king
 
         if in_endgame:
             own_king_pos = test_game.board.get_king_position(turn)
@@ -520,7 +624,7 @@ class StrategicChessAgent:
                     0,
                     14 - (abs(own_king_pos[0] - opp_king_pos[0]) + abs(own_king_pos[1] - opp_king_pos[1])),
                 )
-                * 200
+                * weights["king_proximity_bonus"]
             )
 
             safety_score += king_proximity_bonus
@@ -556,19 +660,19 @@ class StrategicChessAgent:
     def evaluate_pawn_structure(self, game, turn, in_endgame):
         pawn_score = 0
         pawns = [pos for pos in game.board.positions("P" if turn == "w" else "p")]
-
+        weights = self.WEIGHTS
         for pawn in pawns:
             if self.is_passed_pawn(game, pawn):
-                pawn_score += 100  # Significant bonus for passed pawn
+                pawn_score += weights["passed_pawn"]  # Significant bonus for passed pawn
                 if in_endgame:
-                    pawn_score += 50  # Additional bonus in endgame
+                    pawn_score += weights["in_endgame"]  # Additional bonus in endgame
 
             if self.is_doubled_pawn(game, pawn, turn):
-                pawn_score -= 50  # Penalty for doubled pawn
+                pawn_score -= weights["doubled_pawn"]  # Penalty for doubled pawn
             if self.is_isolated_pawn(game, pawn):
-                pawn_score -= 50  # Penalty for isolated pawn
+                pawn_score -= weights["isolated_pawn"]  # Penalty for isolated pawn
             if self.is_backward_pawn(game, pawn):
-                pawn_score -= 50  # Penalty for backward pawn
+                pawn_score -= ["backward_pawn"]  # Penalty for backward pawn
 
         pawn_majority_score = self.evaluate_pawn_majority(game, turn)
         pawn_score += pawn_majority_score
@@ -655,40 +759,42 @@ class StrategicChessAgent:
             "center": range(3, 6),  # Files d, e, f
             "right": range(6, 8),  # Files g, h
         }
+        weights = self.WEIGHTS
         for zone_name, files in zones.items():
             own_pawns = len([pos for pos in game.board.positions("P" if turn == "w" else "p") if Game.i2xy(pos)[0] in files])
             opponent_pawns = len([pos for pos in game.board.positions("p" if turn == "w" else "P") if Game.i2xy(pos)[0] in files])
             if own_pawns > opponent_pawns:
-                majority_score += (own_pawns - opponent_pawns) * 10  # Reward for pawn majority
+                majority_score += (own_pawns - opponent_pawns) * weights["pawn_majority"]  # Reward for pawn majority
             elif own_pawns < opponent_pawns:
-                majority_score -= (opponent_pawns - own_pawns) * 10  # Penalize for pawn deficit
+                majority_score -= (opponent_pawns - own_pawns) * weights["pawn_deficit"]  # Penalize for pawn deficit
         return majority_score
 
     def evaluate_positional_factors(self, game, turn, in_endgame):
         positional_score = 0
 
+        weights = self.WEIGHTS
         # Control of the Center
         center_squares = ["d4", "d5", "e4", "e5"]
         for square in center_squares:
             pos = Game.xy2i(square)
             piece = game.board.get_piece(pos)
             if (turn == "w" and piece.isupper()) or (turn == "b" and piece.islower()):
-                positional_score += 100  # Bonus for controlling center squares
-
+                positional_score += weights["center_squares"]  # Bonus for controlling center squares
+        
         open_files = self.get_open_files(game)
-        positional_score += len(open_files) * 50  # Bonus for each open file
+        positional_score += len(open_files) * weights["open_file"]  # Bonus for each open file
 
         open_diagonals = self.get_open_diagonals(game)
-        positional_score += len(open_diagonals) * 50  # Bonus for each open diagonal
+        positional_score += len(open_diagonals) * weights["open_diagonal"]  # Bonus for each open diagonal
 
         controlled_squares = self.count_controlled_squares(game, turn)
-        positional_score += controlled_squares * (1 if not in_endgame else 2)  # Slightly higher in endgame
+        positional_score += controlled_squares * (1 if not in_endgame else 2) * weights["controlled_squares"]  # Slightly higher in endgame
 
         key_squares = self.get_key_squares(game, turn)
-        positional_score += len(key_squares) * 100  # Significant bonus for control of key squares
+        positional_score += len(key_squares) * weights["key_squares"]  # Significant bonus for control of key squares
 
         zugzwang_score = self.evaluate_zugzwang_potential(game, turn)
-        positional_score += zugzwang_score * 100  # High bonus for potential zugzwang
+        positional_score += zugzwang_score * weights["potential_zugzwang"]  # High bonus for potential zugzwang
 
         return positional_score
 
@@ -785,16 +891,16 @@ class StrategicChessAgent:
             "f3",
             "f6",
         ]  # Include central squares
-
+        weights = self.WEIGHTS
         for square in bottleneck_squares:
             pos = Game.xy2i(square)
             piece = game.board.get_piece(pos)
             if (turn == "w" and piece.isupper()) or (turn == "b" and piece.islower()):
-                bottleneck_score += 100
+                bottleneck_score += weights["bottlenecked_square"]
 
             opponent_attacks = self.get_controlled_squares(game, opponent)
             if pos in opponent_attacks:
-                bottleneck_score += 50
+                bottleneck_score += weights["attack_potential"]
 
         return bottleneck_score
 
@@ -802,18 +908,18 @@ class StrategicChessAgent:
         defense_score = 0
 
         vulnerable_pieces = self.get_vulnerable_pieces(game, turn)
-
+        weights = self.WEIGHTS
         for piece_pos in vulnerable_pieces:
             if self.is_defended(game, piece_pos, turn):
-                defense_score += 100  # Significant reward for defending a vulnerable piece
+                defense_score += weight["vulnerable_piece"]  # Significant reward for defending a vulnerable piece
             else:
-                defense_score -= 100  # Penalty for leaving a piece undefended
+                defense_score -= weights["piece_undefended"]  # Penalty for leaving a piece undefended
 
         blocking_moves = self.get_blocking_moves(game, turn)
-        defense_score += len(blocking_moves) * 50  # Reward for each blocking move
+        defense_score += len(blocking_moves) * weights["blocking_move"]  # Reward for each blocking move
 
         exposed_pieces = self.get_exposed_pieces(game, turn)
-        defense_score -= len(exposed_pieces) * 75  # Penalize for each exposed piece
+        defense_score -= len(exposed_pieces) * weights["exposed_piece"]  # Penalize for each exposed piece
 
         return defense_score
 
@@ -879,13 +985,13 @@ class StrategicChessAgent:
         score = 0
         is_white = turn == "w"
         pawns = game.board.positions("P" if is_white else "p")
-
+        weights = self.WEIGHTS
         for pawn in pawns:
             x, y = Game.i2xy(pawn)
             if is_white and y == 6:
-                score += 250
+                score += weights["pawn_promotion"]
             elif (not is_white) and y == 1:
-                score += 250
+                score += weights["pawn_promotion"]
 
         return score
 
@@ -895,8 +1001,9 @@ class StrategicChessAgent:
             return 0
         x, y = Game.i2xy(king_pos)
         # Centralize the king
+        weights= self.WEIGHTS
         distance_to_center = abs(x - 3.5) + abs(y - 3.5)
-        activity_score = (7 - distance_to_center) * 20  # Higher when closer to center
+        activity_score = (7 - distance_to_center) * weights["king_activity"]  # Higher when closer to center
         return activity_score
 
     def evaluate_rook_king_coordination(self, game, turn):
@@ -905,10 +1012,11 @@ class StrategicChessAgent:
         king_pos = game.find_king(turn)
         if not king_pos:
             return coordination_score
+        weights = self.WEIGHTS
         for rook in rooks:
             distance = self.distance(rook, king_pos)
             if distance <= 4:
-                coordination_score += 50  # Reward rooks near the king
+                coordination_score += weights["rook_king_coordination"]  # Reward rooks near the king
         return coordination_score
 
     def evaluate_control_of_key_squares(self, game, turn):
@@ -929,11 +1037,12 @@ class StrategicChessAgent:
             ]
         )  # Expanded for aggressive bottlenecking
         control_score = 0
+        weights = self.WEIGHTS
         for square in key_squares:
             pos = Game.xy2i(square)
             piece = game.board.get_piece(pos)
             if (turn == "w" and piece.isupper()) or (turn == "b" and piece.islower()):
-                control_score += 75  # Significant bonus for controlling key squares
+                control_score += weights["controlling_key_squares"]  # Significant bonus for controlling key squares
         return control_score
 
     def distance(self, pos1, pos2):
@@ -955,29 +1064,31 @@ class StrategicChessAgent:
 
     def evaluate_king_and_pawns_endgame(self, game, turn):
         endgame_score = 0
+        weights =  self.WEIGHTS
         king_pos = game.find_king(turn)
         if king_pos:
             x, y = Game.i2xy(king_pos)
             distance_to_center = abs(x - 3.5) + abs(y - 3.5)
-            endgame_score += (7 - distance_to_center) * 10  # Closer to center is better
+            endgame_score += (7 - distance_to_center) * weights["closenest_to_center"]  # Closer to center is better
         pawns = [pos for pos in game.board.positions("P" if turn == "w" else "p")]
         for pawn in pawns:
             x, y = Game.i2xy(pawn)
             advancement = y if turn == "w" else 7 - y
-            endgame_score += advancement * 10  # Encourage advancing pawns
+            endgame_score += advancement * weights["advancing_pawns"]  # Encourage advancing pawns
         return endgame_score
 
     def evaluate_rook_endgame(self, game, turn):
         endgame_score = 0
+        weights = self.WEIGHTS
         rooks = [pos for pos in game.board.positions("R" if turn == "w" else "r")]
         for rook in rooks:
             x, y = Game.i2xy(rook)
             file = chr(x + ord("a"))
             is_open = all(game.board.get_piece(Game.xy2i(f"{file}{rank}")) == " " for rank in range(1, 9))
             if is_open:
-                endgame_score += 50  # Bonus for rook on open file
+                endgame_score += weights["on_open_file"]  # Bonus for rook on open file
             distance_to_center = abs(x - 3.5) + abs(y - 3.5)
-            endgame_score += (7 - distance_to_center) * 5  # Closer to center is better
+            endgame_score += (7 - distance_to_center) * weights["rook_closer_to_center"]  # Closer to center is better
         endgame_score += self.evaluate_pawn_structure(game, turn, in_endgame=True)
         return endgame_score
 
@@ -1086,18 +1197,18 @@ class StrategicChessAgent:
     def evaluate_piece_coordination(self, game, turn):
         score = 0
         pieces = (game.board.positions("N") + game.board.positions("B") + game.board.positions("R") + game.board.positions("Q") + game.board.positions("K")) if turn == "w" else (game.board.positions("n") + game.board.positions("b") + game.board.positions("r") + game.board.positions("q") + game.board.positions("k"))
-
+        weights =  self.WEIGHTS
         for piece in pieces:
             attacks = game.get_piece_attacks(game.board.get_piece(piece), piece)
             for target in attacks:
                 target_piece = game.board.get_piece(target)
                 if target_piece != " " and (target_piece.islower() if turn == "w" else target_piece.isupper()):
                     # Reward attacks and mutual support
-                    score += 20  # Base reward
+                    score += weights["mutual_support"]  # Base reward
                     if self.is_attacked_by_ally(game, target, turn):
-                        score += 90  # Extra for coordinated attacks
+                        score += weights["coordinated_attacks"]  # Extra for coordinated attacks
                     if self.is_defended(game, target, turn):
-                        score += 50  # Reward supported squares
+                        score += weights["upported_squares"]  # Reward supported squares
         return score
 
     def is_attacked_by_ally(self, game, pos, turn):
@@ -1245,6 +1356,7 @@ class StrategicChessAgent:
 
     def evaluate_multi_piece_coordination(self, game, turn):
         score = 0
+        weights = self.WEIGHTS
         opponent_king = game.find_king("b" if turn == "w" else "w")
         if not opponent_king:
             return score  # No king found, skip evaluation
@@ -1257,14 +1369,14 @@ class StrategicChessAgent:
 
         num_attackers = len(attacking_pieces)
         if num_attackers >= 2:
-            score += num_attackers * 300  # Reward for each attacking piece
-            score += num_attackers * (num_attackers - 1) * 100  # Extra synergy reward for multiple attackers
+            score += num_attackers * weights["attacking_pieces"]  # Reward for each attacking piece
+            score += num_attackers * (num_attackers - 1) * weights["multiple_attackers"]  # Extra synergy reward for multiple attackers
 
         restricted_squares = len(self.get_surrounding_squares(game, opponent_king)) - len([sq for sq in self.get_surrounding_squares(game, opponent_king) if game.board.get_piece(sq) == " "])
-        score += restricted_squares * 50  # Reward for limiting king movement
+        score += restricted_squares * weights["limiting_king"]  # Reward for limiting king movement
 
         pawns_supporting = self.get_pawn_support(game, opponent_king, turn)
-        score += len(pawns_supporting) * 100  # Reward pawns controlling key squares around the king
+        score += len(pawns_supporting) * weights["pawn_control_key"]  # Reward pawns controlling key squares around the king
 
         return score
 
@@ -1278,15 +1390,16 @@ class StrategicChessAgent:
 
     def evaluate_checkmate_patterns(self, game, turn):
         score = 0
+        weights = self.WEIGHTS
         opponent_king = game.find_king("b" if turn == "w" else "w")
         if not opponent_king:
             return score
 
         if self.is_back_rank_mate_possible(game, opponent_king, turn):
-            score += 500
+            score += weights["back_rank_mate"]
 
         if self.is_smothered_mate_possible(game, opponent_king, turn):
-            score += 500
+            score += weights["smothered_mate"]
 
         score += self.evaluate_multi_piece_coordination(game, turn)
 
@@ -1326,16 +1439,16 @@ class StrategicChessAgent:
         score = 0
         key_squares = self.get_key_squares(game, turn)
         piece_attacks = game.get_piece_attacks(game.board.get_piece(piece_pos), piece_pos)
-
+        weights = self.WEIGHTS
         for square in key_squares:
             if square in piece_attacks:
-                score += 50  # Reward for controlling a key square
+                score += weights["key_square_control"]  # Reward for controlling a key square
 
                 if self.is_attacked_by_ally(game, square, turn):
-                    score += 30
+                    score += weights["square_is_ally"]
 
                 if not self.is_defended(game, square, turn):
-                    score -= 20
+                    score -= weights["square_is_defended"]
 
         return score
 
@@ -1375,13 +1488,14 @@ class StrategicChessAgent:
             return score
 
         restricted_squares = len(self.get_surrounding_squares(game, opponent_king)) - len([sq for sq in self.get_surrounding_squares(game, opponent_king) if game.board.get_piece(sq) == " "])
-        score += restricted_squares * 50
+        weights = self.WEIGHTS
+        score += restricted_squares * weights["restricted_squares"]
 
         if self.is_ladder_mate_possible(game, opponent_king, turn):
-            score += 500
+            score += weights["ladder_mate_possible"]
 
         if self.is_rook_king_endgame(game, opponent_king, turn):
-            score += 300
+            score += weights["rook_king_endgame"]
 
         return score
 
@@ -1389,10 +1503,11 @@ class StrategicChessAgent:
         score = 0
         pawns = game.board.positions("P" if turn == "w" else "p")
         king_pos = game.find_king(turn)
+        weights = self.WEIGHTS
         for pawn in pawns:
             distance = self.distance(king_pos, pawn)
             if distance <= 2:
-                score += 50  # Reward proximity to pawn
+                score += weights["pawn_proximity"]  # Reward proximity to pawn
         return score
 
     def evaluate_checkmate_coordination(self, game, turn):
@@ -1405,18 +1520,19 @@ class StrategicChessAgent:
         king_attacks = 0
         key_supporting_pieces = 0
         key_squares_near_king = self.get_surrounding_squares(game, opponent_king)
-
+        
+        weights = self.WEIGHTS
         for square in key_squares_near_king:
             if self.is_attacked_by_ally(game, square, turn):
                 king_attacks += 1
             if self.is_defended(game, square, turn):
                 key_supporting_pieces += 1
 
-        score += king_attacks * 200  # Attacks around king
-        score += key_supporting_pieces * 100  # Support near king
+        score += king_attacks * weights["king_attacks"]  # Attacks around king
+        score += key_supporting_pieces * weights["key_supporting_pieces"]  # Support near king
 
         if game.is_in_check(opponent):
-            score += 500
+            score += weights["is_in_check"]
 
         return score
 
